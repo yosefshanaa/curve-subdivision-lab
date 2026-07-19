@@ -29,7 +29,7 @@ Make the core concepts of curve subdivision *visible and manipulable*:
 - S2: With overlay enabled, the approximating-vs-interpolating difference is visually obvious in one glance (Four-Point curve passes through control points; Chaikin curve pulls away from them).
 - S3: Pressing the fractal preset visibly transforms the smooth Four-Point curve into a jagged, self-similar one.
 - S4: The stats panel makes the exponential vertex growth explicit (e.g., 8 → 512 vertices at 6 iterations).
-- S4b: The stats panel demonstrates the lecture's "~5 iterations is effectively infinity" rule directly: it shows the longest curve-edge length in pixels, and labels the curve "≈ limit curve" once edges drop below 1 px.
+- S4b: The stats panel demonstrates the lecture's "~5 iterations is effectively infinity" rule directly: it shows the longest curve-edge length in pixels (visibly halving each iteration), and labels the curve "≈ limit curve" once edges drop below 1 px. Note: how many iterations that takes depends on the initial edge length — a densely clicked polygon (edges ~50 px) reaches sub-pixel at 5–6 iterations; the sparse 9-point preset (edges ~300 px) does not by 6, which is itself a truthful demonstration of the rule's assumption.
 - S5: The app never freezes or crashes during a live demo (iteration cap + vertex cap enforced).
 - S6: Everything runs from a double-clicked local file with no network access.
 
