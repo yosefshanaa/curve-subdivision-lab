@@ -468,14 +468,101 @@ document.getElementById('closedChk').addEventListener('change', (e) => {
 document.querySelectorAll('input[name=scheme]').forEach((r) =>
   r.addEventListener('change', (e) => {
     state.scheme = e.target.value;
+    syncWeightSlider();   // slider is a view onto the active scheme's parameter
     update();
   })
 );
 
-function refreshStats() { /* wired in stage 4 (ui module) */ }
+/* ================= ui: sliders, presets, stats ================= */
+
+const $ = (id) => document.getElementById(id);
+
+// -- iterations slider
+$('iterSlider').addEventListener('input', (e) => {
+  state.iterations = +e.target.value;
+  update();
+});
+
+// -- contextual weight slider: a *view* onto chaikinT or fourPointW,
+//    whichever scheme is active (separate state fields, no cross-contamination)
+const SLIDER_CFG = {
+  chaikin:   { label: 'Cut ratio t', min: 0.05, max: 0.45, key: 'chaikinT' },
+  fourpoint: { label: 'Weight w',    min: 0,    max: 0.25, key: 'fourPointW' },
+};
+
+function syncWeightSlider() {
+  const cfg = SLIDER_CFG[state.scheme];
+  const s = $('weightSlider');
+  $('weightLabel').textContent = cfg.label;
+  s.min = cfg.min; s.max = cfg.max; s.step = 0.0025;
+  s.value = state[cfg.key];
+}
+
+$('weightSlider').addEventListener('input', (e) => {
+  state[SLIDER_CFG[state.scheme].key] = +e.target.value;
+  update();
+});
+
+$('weightReset').addEventListener('click', () => {
+  const key = SLIDER_CFG[state.scheme].key;
+  state[key] = DEFAULTS[key];
+  syncWeightSlider();
+  update();
+});
+
+// -- fractal preset (FR-12): one click to the lecture's "wrong weights" warning
+$('fractalBtn').addEventListener('click', () => {
+  state.scheme = 'fourpoint';
+  state.fourPointW = 0.18;
+  state.iterations = 6;
+  document.querySelector('input[name=scheme][value=fourpoint]').checked = true;
+  $('iterSlider').value = 6;
+  syncWeightSlider();
+  update();
+});
+
+// -- overlay toggle
+$('overlayChk').addEventListener('change', (e) => {
+  state.showOverlay = e.target.checked;
+  update();
+});
+
+// -- stats panel + state-driven fractal caption
+const SCHEME_NAMES = {
+  chaikin: 'Chaikin (approximating)',
+  fourpoint: 'Four-Point (interpolating)',
+};
+
+function refreshStats() {
+  const tooFew = state.points.length < (state.closed ? 3 : 2);
+  const capped = !tooFew && state.effectiveIterations < state.iterations;
+  $('stScheme').textContent = SCHEME_NAMES[state.scheme];
+  $('stIter').textContent = capped
+    ? `${state.effectiveIterations} (capped at ${VERTEX_CAP.toLocaleString()} verts)`
+    : state.iterations;
+  const cfg = SLIDER_CFG[state.scheme];
+  $('stWeight').textContent = `${cfg.label.split(' ').pop()} = ${(+state[cfg.key]).toFixed(4)}`;
+  $('stPoints').textContent = state.points.length;
+  $('stVerts').textContent = state.curve.length.toLocaleString();
+  $('stEdge').textContent = state.curve.length >= 2 && state.iterations > 0
+    ? `${state.maxEdgeLen.toFixed(state.maxEdgeLen < 10 ? 2 : 1)} px`
+    : '–';
+
+  // "~5 iterations is effectively infinity": badge once edges drop below 1 px
+  const atLimit = state.curve.length >= 2 && state.iterations > 0 && state.maxEdgeLen < 1;
+  $('limitBadge').classList.toggle('show', atLimit);
+
+  // fractal caption is derived from state, not from the button (FR-12)
+  const fractal = state.scheme === 'fourpoint' && state.fourPointW > 1 / 8;
+  $('caption').classList.toggle('show', fractal);
+
+  $('iterVal').textContent = state.iterations;
+  $('weightVal').textContent = (+state[cfg.key]).toFixed(4);
+}
 
 /* ================= boot ================= */
 
+syncWeightSlider();
 resizeCanvas();
 loadPreset();   // never open to a blank canvas (FR-5)
 </script>
