@@ -48,6 +48,10 @@ Implemented all three optional features: an "auto-grow" button that animates ite
 
 ![Side-by-side comparison](screenshots/07-side-by-side.png)
 
+### Visual design pass
+
+A later polish pass restyled the UI while keeping the same palette: serif title with the subdivision pipeline (P⁰ → S(P⁰) → S²(P⁰) → … → limit curve) as a monospace formula, segmented scheme cards, a graph-paper dot grid drawn in-canvas (so PNG export keeps it), tick marks on the iteration slider, and an instrument-style readout grid. The signature addition is a **live stencil diagram** under the scheme selector: a miniature polyline where the actual insertion formula computes the new points, so moving the t/w slider physically moves the cut points (Chaikin) or pushes the inserted point Q outward (Four-Point) — the scheme's rule is visible before it is ever applied to the real curve.
+
 ## Feature → lecture-concept mapping
 
 | Lecture concept | Where it is visible in the app |
