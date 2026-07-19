@@ -219,10 +219,107 @@ function update() {
   refreshStats();
 }
 
-function computeCurve() {  // replaced by the schemes module (stage 3)
-  state.curve = state.points.slice();
-  state.effectiveIterations = 0;
-  state.maxEdgeLen = 0;
+/* ================= schemes (pure geometry) ================= */
+
+// Resolve any integer index to a point. Closed: wrap modulo n.
+// Open: phantom points by reflection (P_-1 = 2P0 - P1, P_n = 2P_{n-1} - P_{n-2}),
+// i.e. linear extrapolation past the ends — keeps the Four-Point formula uniform.
+function makeResolver(pts, closed) {
+  const n = pts.length;
+  if (closed) return (i) => pts[((i % n) + n) % n];
+  return (i) => {
+    if (i >= 0 && i < n) return pts[i];
+    if (i < 0) {
+      const m = pts[0], q = pts[-i];
+      return { x: 2 * m.x - q.x, y: 2 * m.y - q.y };
+    }
+    const m = pts[n - 1], q = pts[2 * (n - 1) - i];
+    return { x: 2 * m.x - q.x, y: 2 * m.y - q.y };
+  };
+}
+
+// Chaikin corner cutting: each edge -> two points at t and 1-t (default t=0.25,
+// the classic 1:3 cut). Approximating: corners get cut, curve pulls off the points.
+// Open mode re-anchors the original endpoints so the curve doesn't shrink inward.
+function chaikinStep(pts, closed, t) {
+  const n = pts.length;
+  const edges = closed ? n : n - 1;
+  const out = [];
+  for (let i = 0; i < edges; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    out.push({ x: (1 - t) * a.x + t * b.x, y: (1 - t) * a.y + t * b.y });
+    out.push({ x: t * a.x + (1 - t) * b.x, y: t * a.y + (1 - t) * b.y });
+  }
+  if (!closed) {
+    out.unshift({ x: pts[0].x, y: pts[0].y });
+    out.push({ x: pts[n - 1].x, y: pts[n - 1].y });
+  }
+  return out;
+}
+
+// Four-Point scheme: keep all old points, insert per edge
+//   Q = (1/2 + w)(P_i + P_{i+1}) - w(P_{i-1} + P_{i+2})
+// Interpolating: the limit curve passes through the control points.
+// w = 1/16 -> smooth C1 curve; w = 0 -> midpoints (polygon is its own limit);
+// w >> 1/16 -> no smooth convergence: fractal-like limit curve.
+function fourPointStep(pts, closed, w) {
+  const n = pts.length;
+  const P = makeResolver(pts, closed);
+  const edges = closed ? n : n - 1;
+  const out = [];
+  for (let i = 0; i < edges; i++) {
+    out.push({ x: pts[i].x, y: pts[i].y });
+    const a = P(i - 1), b = P(i), c = P(i + 1), d = P(i + 2);
+    out.push({
+      x: (0.5 + w) * (b.x + c.x) - w * (a.x + d.x),
+      y: (0.5 + w) * (b.y + c.y) - w * (a.y + d.y),
+    });
+  }
+  if (!closed) out.push({ x: pts[n - 1].x, y: pts[n - 1].y });
+  return out;
+}
+
+// Driver: apply the active scheme `iterations` times, stopping early at the
+// vertex cap (the lecture warns that over-subdividing freezes machines).
+function subdivide(points, closed, scheme, param, iterations, cap) {
+  let pts = points;
+  let done = 0;
+  while (done < iterations && pts.length * 2 <= cap) {
+    pts = scheme === 'chaikin'
+      ? chaikinStep(pts, closed, param)
+      : fourPointStep(pts, closed, param);
+    done++;
+  }
+  return { curve: pts, effectiveIterations: done };
+}
+
+function computeCurve() {
+  const pts = state.points;
+  const minPts = state.closed ? 3 : 2;
+  const tooFew = pts.length < minPts;
+  document.getElementById('canvasHint').classList.toggle('show', tooFew);
+
+  if (tooFew) {
+    state.curve = pts.slice();
+    state.effectiveIterations = 0;
+    state.maxEdgeLen = 0;
+    return;
+  }
+
+  const param = state.scheme === 'chaikin' ? state.chaikinT : state.fourPointW;
+  const res = subdivide(pts, state.closed, state.scheme, param, state.iterations, VERTEX_CAP);
+  state.curve = res.curve;
+  state.effectiveIterations = res.effectiveIterations;
+
+  let max = 0;
+  const c = state.curve;
+  const edges = state.closed ? c.length : c.length - 1;
+  for (let i = 0; i < edges; i++) {
+    const a = c[i], b = c[(i + 1) % c.length];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len > max) max = len;
+  }
+  state.maxEdgeLen = max;
 }
 
 /* ================= render ================= */
@@ -368,6 +465,12 @@ document.getElementById('closedChk').addEventListener('change', (e) => {
   state.closed = e.target.checked;
   update();
 });
+document.querySelectorAll('input[name=scheme]').forEach((r) =>
+  r.addEventListener('change', (e) => {
+    state.scheme = e.target.value;
+    update();
+  })
+);
 
 function refreshStats() { /* wired in stage 4 (ui module) */ }
 
