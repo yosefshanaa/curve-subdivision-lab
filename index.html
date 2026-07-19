@@ -1,8 +1,16 @@
 <!DOCTYPE html>
+<!--
+  Curve Subdivision Lab — Computer Graphics mini-project.
+  Interactive demo of curve subdivision (Subdivision lecture): control polygon
+  editing, Chaikin corner cutting (approximating) vs Four-Point (interpolating),
+  adjustable weights, and the fractal behavior of wrong Four-Point weights.
+  Single self-contained file: no dependencies, no build, no server.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Curve Subdivision Lab</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#x3030;&#xFE0F;</text></svg>">
 <style>
   :root {
     --bg: #12121a;
@@ -134,11 +142,14 @@
       <legend>View</legend>
       <label class="row"><input type="checkbox" id="closedChk" checked> Closed polygon</label>
       <label class="row"><input type="checkbox" id="overlayChk" checked> Show control polygon overlay</label>
+      <label class="row"><input type="checkbox" id="compareChk"> Compare both schemes</label>
     </fieldset>
 
     <fieldset>
       <legend>Actions</legend>
       <button class="big" id="fractalBtn">&#9888;&#65039; Show fractal behavior</button>
+      <button class="big" id="growBtn">&#9654; Auto-grow 0 &rarr; 6</button>
+      <button class="big" id="exportBtn">Export PNG</button>
       <button class="big" id="presetBtn">Preset shape</button>
       <button class="big" id="clearBtn">Clear</button>
     </fieldset>
@@ -184,6 +195,7 @@ const state = {
 
   // view options
   showOverlay: true,
+  compareBoth: false,        // side-by-side: render the other scheme too (M3)
 
   // interaction (transient)
   dragIndex: -1,
@@ -191,6 +203,7 @@ const state = {
 
   // derived — recomputed by update(), never edited directly
   curve: [],
+  curve2: [],                // the non-active scheme's curve when compareBoth
   effectiveIterations: 0,
   maxEdgeLen: 0,
 };
@@ -301,6 +314,7 @@ function computeCurve() {
 
   if (tooFew) {
     state.curve = pts.slice();
+    state.curve2 = [];
     state.effectiveIterations = 0;
     state.maxEdgeLen = 0;
     return;
@@ -310,6 +324,14 @@ function computeCurve() {
   const res = subdivide(pts, state.closed, state.scheme, param, state.iterations, VERTEX_CAP);
   state.curve = res.curve;
   state.effectiveIterations = res.effectiveIterations;
+
+  if (state.compareBoth) {
+    const other = state.scheme === 'chaikin' ? 'fourpoint' : 'chaikin';
+    const otherParam = other === 'chaikin' ? state.chaikinT : state.fourPointW;
+    state.curve2 = subdivide(pts, state.closed, other, otherParam, state.iterations, VERTEX_CAP).curve;
+  } else {
+    state.curve2 = [];
+  }
 
   let max = 0;
   const c = state.curve;
@@ -344,12 +366,36 @@ function render() {
   const pts = state.points;
   const showPolygon = state.showOverlay || state.iterations === 0;
 
+  // comparison curve (other scheme) below the active one
+  if (state.curve2.length >= 2 && state.iterations > 0) {
+    ctx.strokeStyle = css('--accent2');
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    strokePath(state.curve2, state.closed);
+  }
+
   // subdivided curve (bold) — under the overlay so it visibly threads/misses the dots
   if (state.curve.length >= 2 && state.iterations > 0) {
     ctx.strokeStyle = css('--accent');
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     strokePath(state.curve, state.closed);
+  }
+
+  // legend for compare mode
+  if (state.compareBoth && state.curve2.length >= 2 && state.iterations > 0) {
+    const active = state.scheme === 'chaikin' ? 'Chaikin' : 'Four-Point';
+    const other = state.scheme === 'chaikin' ? 'Four-Point' : 'Chaikin';
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    for (const [i, [color, name]] of [[css('--accent'), active], [css('--accent2'), other]].entries()) {
+      const y = 24 + i * 22;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(16, y); ctx.lineTo(44, y); ctx.stroke();
+      ctx.fillStyle = css('--text');
+      ctx.fillText(name, 52, y);
+    }
   }
 
   // control polygon overlay (faint dashed) — full brightness at iterations 0 (it IS the curve)
@@ -479,6 +525,7 @@ const $ = (id) => document.getElementById(id);
 
 // -- iterations slider
 $('iterSlider').addEventListener('input', (e) => {
+  stopGrow();   // manual slider use cancels a running auto-grow
   state.iterations = +e.target.value;
   update();
 });
@@ -525,6 +572,42 @@ $('fractalBtn').addEventListener('click', () => {
 $('overlayChk').addEventListener('change', (e) => {
   state.showOverlay = e.target.checked;
   update();
+});
+
+// -- side-by-side compare (M3)
+$('compareChk').addEventListener('change', (e) => {
+  state.compareBoth = e.target.checked;
+  update();
+});
+
+// -- auto-grow: animate iterations 0 -> 6 (M3)
+let growTimer = null;
+function stopGrow() {
+  if (!growTimer) return;
+  clearInterval(growTimer);
+  growTimer = null;
+  $('growBtn').innerHTML = '&#9654; Auto-grow 0 &rarr; 6';
+}
+$('growBtn').addEventListener('click', () => {
+  if (growTimer) { stopGrow(); return; }
+  state.iterations = 0;
+  $('iterSlider').value = 0;
+  update();
+  $('growBtn').innerHTML = '&#9632; Stop';
+  growTimer = setInterval(() => {
+    if (state.iterations >= 6) { stopGrow(); return; }
+    state.iterations++;
+    $('iterSlider').value = state.iterations;
+    update();
+  }, 400);
+});
+
+// -- PNG export (M3)
+$('exportBtn').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'curve-subdivision.png';
+  a.click();
 });
 
 // -- stats panel + state-driven fractal caption
