@@ -225,19 +225,156 @@ function computeCurve() {  // replaced by the schemes module (stage 3)
   state.maxEdgeLen = 0;
 }
 
+/* ================= render ================= */
+
+const POINT_R = 5;      // drawn radius
+const HIT_R = 10;       // grab radius (forgiving for live demos)
+
+function strokePath(pts, close) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  if (close) ctx.closePath();
+  ctx.stroke();
+}
+
 function render() {
   const rect = canvas.getBoundingClientRect();
   ctx.clearRect(0, 0, rect.width, rect.height);
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg');
   ctx.fillRect(0, 0, rect.width, rect.height);
+
+  const pts = state.points;
+  const showPolygon = state.showOverlay || state.iterations === 0;
+
+  // subdivided curve (bold) — under the overlay so it visibly threads/misses the dots
+  if (state.curve.length >= 2 && state.iterations > 0) {
+    ctx.strokeStyle = css('--accent');
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    strokePath(state.curve, state.closed);
+  }
+
+  // control polygon overlay (faint dashed) — full brightness at iterations 0 (it IS the curve)
+  if (pts.length >= 2 && showPolygon) {
+    ctx.strokeStyle = state.iterations === 0 ? css('--accent') : css('--poly');
+    ctx.lineWidth = state.iterations === 0 ? 2.5 : 1;
+    ctx.setLineDash(state.iterations === 0 ? [] : [5, 5]);
+    strokePath(pts, state.closed);
+    ctx.setLineDash([]);
+  }
+
+  // control points on top
+  if (showPolygon) {
+    for (let i = 0; i < pts.length; i++) {
+      const active = i === state.dragIndex || i === state.hoverIndex;
+      ctx.beginPath();
+      ctx.arc(pts[i].x, pts[i].y, active ? POINT_R + 2 : POINT_R, 0, Math.PI * 2);
+      ctx.fillStyle = css('--point');
+      ctx.fill();
+      if (active) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke(); }
+    }
+  }
 }
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* ================= input ================= */
+
+function mousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+// backwards scan so the topmost (latest-drawn) point wins on overlap
+function hitTest(pos) {
+  for (let i = state.points.length - 1; i >= 0; i--) {
+    const p = state.points[i];
+    if (Math.hypot(p.x - pos.x, p.y - pos.y) <= HIT_R) return i;
+  }
+  return -1;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  const pos = mousePos(e);
+  const hit = hitTest(pos);
+  if (hit >= 0) {
+    state.dragIndex = hit;
+  } else {
+    state.points.push(pos);          // add-then-drag in one gesture
+    state.dragIndex = state.points.length - 1;
+  }
+  update();
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const pos = mousePos(e);
+  if (state.dragIndex >= 0) {
+    const p = state.points[state.dragIndex];
+    p.x = pos.x; p.y = pos.y;
+    update();
+  } else {
+    const hover = hitTest(pos);
+    if (hover !== state.hoverIndex) {
+      state.hoverIndex = hover;
+      canvas.style.cursor = hover >= 0 ? 'pointer' : 'crosshair';
+      render();
+    }
+  }
+});
+
+function endDrag() {
+  if (state.dragIndex >= 0) { state.dragIndex = -1; update(); }
+}
+canvas.addEventListener('mouseup', endDrag);
+canvas.addEventListener('mouseleave', () => { endDrag(); state.hoverIndex = -1; render(); });
+
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const hit = hitTest(mousePos(e));
+  if (hit >= 0) {
+    state.points.splice(hit, 1);
+    state.hoverIndex = -1;
+    update();
+  }
+});
+
+/* ================= presets / basic actions ================= */
+
+// Irregular star-ish demo polygon: mixes sharp and shallow corners (PRD A4),
+// scaled to the current canvas size.
+function loadPreset() {
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  const s = Math.min(rect.width, rect.height) * 0.38;
+  const shape = [
+    [-0.9, -0.2], [-0.45, -0.75], [-0.1, -0.35], [0.5, -0.85],
+    [0.9, -0.1], [0.45, 0.2], [0.75, 0.8], [0.05, 0.55], [-0.6, 0.75],
+  ];
+  state.points = shape.map(([x, y]) => ({ x: cx + x * s, y: cy + y * s }));
+  update();
+}
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  state.points = [];
+  state.dragIndex = state.hoverIndex = -1;
+  update();
+});
+document.getElementById('presetBtn').addEventListener('click', loadPreset);
+document.getElementById('closedChk').addEventListener('change', (e) => {
+  state.closed = e.target.checked;
+  update();
+});
 
 function refreshStats() { /* wired in stage 4 (ui module) */ }
 
 /* ================= boot ================= */
 
 resizeCanvas();
-update();
+loadPreset();   // never open to a blank canvas (FR-5)
 </script>
 </body>
 </html>
