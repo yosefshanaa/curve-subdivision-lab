@@ -19,6 +19,8 @@ Open [`index.html`](index.html) in any modern desktop browser — double-clickin
 | **Interpolating scheme** — Four-Point, `Q = (½+w)(Pᵢ+Pᵢ₊₁) − w(Pᵢ₋₁+Pᵢ₊₂)` | Curve visibly *threads through* every control point |
 | **Weights matter — wrong weights go fractal** | Push w far from 1/16 (one-click preset) and the curve stops converging to anything smooth |
 | **Limit curve & the "~5 iterations is infinity" rule** | Stats panel: vertex count doubles and max edge length halves each iteration, with an "≈ limit curve" badge once edges drop below 1 px |
+| **Fractal self-similarity — "sharp at every zoom level"** | Magnifier lens (6×, subdivided 4 levels deeper): smooth curves flatten under it, fractal curves stay jagged |
+| **Procedural terrain — random midpoint displacement** | Third scheme: midpoint ± r·\|edge\|/2 per edge, range halving each level; roughness slider + re-roll seed |
 
 ### Chaikin (approximating) vs Four-Point (interpolating)
 
@@ -30,14 +32,23 @@ Open [`index.html`](index.html) in any modern desktop browser — double-clickin
 
 ![Fractal behavior](screenshots/04-fractal-mode.png)
 
+### Magnifier lens — self-similarity, live
+
+![Lens over the fractal curve](screenshots/09-lens-fractal.png)
+
+### Midpoint displacement — terrain from subdivision
+
+![Procedural terrain](screenshots/08-terrain.png)
+
 ## Controls
 
 - **Click** empty canvas — add a control point (and drag it into place in the same gesture)
 - **Drag** a point — move it; the curve updates live
 - **Right-click** a point — delete it
-- **Scheme** — Chaikin (approximating) / Four-Point (interpolating)
+- **Scheme** — Chaikin (approximating) / Four-Point (interpolating) / Midpoint displacement (random terrain)
 - **Iterations** — 0–6 subdivision steps (0 shows just the control polygon)
-- **Weight slider** — cut ratio *t* for Chaikin, weight *w* for Four-Point, each with a one-click reset to its classic default (t = 0.25, w = 1/16)
+- **Weight slider** — cut ratio *t* for Chaikin, weight *w* for Four-Point, roughness *r* for midpoint displacement (with re-roll), each with a one-click reset to its default
+- **Magnifier 6×** — cursor lens showing the curve subdivided 4 levels deeper
 - **Closed polygon** — toggle open polyline vs closed loop
 - **Compare both schemes** — render both curves on the same polygon with a legend
 - **Show fractal behavior** — preset: Four-Point, w = 0.18, 6 iterations

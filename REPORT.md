@@ -52,6 +52,18 @@ Implemented all three optional features: an "auto-grow" button that animates ite
 
 A later polish pass restyled the UI while keeping the same palette: serif title with the subdivision pipeline (P⁰ → S(P⁰) → S²(P⁰) → … → limit curve) as a monospace formula, segmented scheme cards, a graph-paper dot grid drawn in-canvas (so PNG export keeps it), tick marks on the iteration slider, and an instrument-style readout grid. The signature addition is a **live stencil diagram** under the scheme selector: a miniature polyline where the actual insertion formula computes the new points, so moving the t/w slider physically moves the cut points (Chaikin) or pushes the inserted point Q outward (Four-Point) — the scheme's rule is visible before it is ever applied to the real curve.
 
+## v2 additions
+
+Two additions after the first review round, both taken from lecture material:
+
+**Magnifier lens (6×, +4 iterations).** A cursor-following lens re-renders the active curve as vector geometry at 6× — subdivided four levels *deeper* than the on-screen curve, with the same seed. This turns two lecture claims into something you can see: a correct scheme flattens under magnification (its limit curve is smooth), while the wrong-weight Four-Point curve stays jagged inside the lens — the fractal lecture's "sharp at every zoom level." It also shows that the "~5 iterations" rule is resolution-dependent: under magnification, more iterations are needed.
+
+![Magnifier lens over the fractal curve](screenshots/09-lens-fractal.png)
+
+**Random midpoint displacement (third scheme).** The procedural-terrain recipe from the fractals/procedural-generation lecture is itself a subdivision scheme: keep old points, insert each edge's midpoint displaced along the edge normal by a random amount within ± r·|edge|/2. Because edges halve each iteration, the displacement range halves too — exactly the lecture's rule. Seeded RNG keeps the terrain stable across redraws (and lets the lens extend the same terrain deterministically); a re-roll button draws a new seed. An open, flat polyline turns into a mountain silhouette:
+
+![Midpoint displacement terrain](screenshots/08-terrain.png)
+
 ## Feature → lecture-concept mapping
 
 | Lecture concept | Where it is visible in the app |
@@ -63,6 +75,8 @@ A later polish pass restyled the UI while keeping the same palette: serif title 
 | Scheme weights matter / wrong weights → fractal | w slider + "Show fractal behavior" preset + warning caption when w > 1/8 |
 | ~5 iterations are "infinity" in practice | Stats: vertex count doubling, max-edge halving each iteration, sub-pixel badge |
 | Subdivision cost warning (over-subdividing freezes machines) | 20,000-vertex cap with a "capped" note in the stats panel |
+| Fractal self-similarity — "sharp at every zoom level" (Lecture 2) | Magnifier lens: smooth curves flatten at 6×, fractal curves stay jagged |
+| Random midpoint displacement / procedural terrain (Lecture 2) | Third scheme: midpoint ± r·\|edge\|/2, range halves per level, seeded + re-roll |
 
 ## Problems encountered
 

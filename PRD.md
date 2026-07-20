@@ -133,7 +133,14 @@ Single screen, no navigation:
 - A4: A single default preset polygon (an irregular star-ish shape with both sharp and shallow corners) is enough to demonstrate all behaviors.
 - A5: English UI text.
 
-## 9. Course Submission Requirements
+## 9. v2 Additions (post-review)
+
+Added after the v1 deliverable was complete, at the author's request, to deepen the lecture coverage. Both map directly to lecture material:
+
+- **FR-20 — Magnifier lens:** a View toggle shows a cursor-following circular lens that re-renders the active curve at 6× **subdivided 4 levels deeper** (separate 80,000-vertex cap). This demonstrates two lecture claims at once: a correct scheme's limit curve is smooth (it flattens under magnification), while the wrong-weight Four-Point curve is fractal ("jagged at every zoom level"); and the "~5 iterations suffice" rule is resolution-dependent (under magnification you need more iterations).
+- **FR-21 — Random midpoint displacement scheme:** a third scheme from the procedural-generation lecture. Keeps old points and inserts each edge's midpoint displaced along the edge normal by a random amount within ± r·|edge|/2 — the displacement range halves each level exactly as the lecture's terrain recipe describes. Roughness slider (0–0.8, default 0.25), seeded RNG so the terrain is stable across redraws, and a "re-roll" button for a new seed. Compare mode is disabled for this scheme (it pairs the two deterministic schemes); the stencil shows the midpoint ± range rule live.
+
+## 10. Course Submission Requirements
 
 The app itself is not the whole deliverable. Per the course's stated workflow (emphasized repeatedly in the lecture notes):
 

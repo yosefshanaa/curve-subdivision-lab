@@ -68,6 +68,14 @@ The lecturer grades the report and the git history, not just the app (see PRD §
 
 ---
 
+## Milestone 4 — v2 additions (PRD §9, user-requested after review)
+
+- [x] 4.1 Magnifier lens: cursor-following 6× lens re-rendering the active curve subdivided 4 levels deeper (seeded, 80k cap); smooth schemes flatten, fractal stays jagged. View toggle, ring + "6× · +4 iter" label.
+- [x] 4.2 Random midpoint displacement scheme (Lecture 2 terrain recipe): third scheme card, roughness slider (± r·|edge|/2, halves per level via edge halving), seeded mulberry32 RNG, re-roll button, live stencil variant. Compare mode disabled while active.
+- [x] 4.3 Verified in Node (determinism per seed, interpolation, r=0 flatness, displacement bounds) and headlessly via CDP (UI wiring, terrain stability across redraws, re-roll, lens rendering, zero console errors); sidebar still fits 800px height with no scroll.
+
+---
+
 ## Pre-demo manual test checklist
 
 Items marked ✅ were verified headlessly (CDP-driven Chrome, synthetic mouse events, zero console errors). Items marked 👤 need a quick human pass before the live demo — they are about feel/appearance, not correctness.
