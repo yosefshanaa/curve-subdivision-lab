@@ -17,6 +17,10 @@ struct Mesh {
     std::vector<Vec3> V;                 // vertex positions
     std::vector<std::vector<int>> F;     // faces: CCW loops of vertex indices
 
+    // Optional per-vertex colour (terrain elevation ramp, scheme comparison
+    // heat maps). Empty means "use the material albedo".
+    std::vector<Vec3> vertexColor;
+
     // Derived by computeNormals(); cleared whenever geometry changes.
     std::vector<Vec3> faceNormal;
     std::vector<Vec3> vertexNormal;
@@ -33,8 +37,10 @@ struct Mesh {
     void computeNormals();               // face normals + area-weighted vertex normals
     void clear();
 
-    // Fit the mesh into a unit-ish box centred on the origin, for consistent framing.
-    void normalizeToUnitBox(double targetRadius = 1.0);
+    // Centre on the bounding-box centre and scale so the bounding sphere has
+    // the given radius. Framing then behaves the same for every base cage,
+    // whether it is a cube (corners far out) or an icosahedron (nearly round).
+    void normalizeToRadius(double targetRadius = 1.0);
     void bounds(Vec3& lo, Vec3& hi) const;
     Vec3 centroid() const;
 
@@ -101,6 +107,7 @@ MeshStats computeStats(const Mesh& m, const Topology& t);
 struct RTri {
     Vec3 p[3];
     Vec3 n[3];
+    Vec3 c[3] = {Vec3(1, 1, 1), Vec3(1, 1, 1), Vec3(1, 1, 1)};
     int face = 0;
 };
 

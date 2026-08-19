@@ -54,7 +54,7 @@ void Mesh::computeNormals() {
 }
 
 void Mesh::clear() {
-    V.clear(); F.clear(); faceNormal.clear(); vertexNormal.clear();
+    V.clear(); F.clear(); vertexColor.clear(); faceNormal.clear(); vertexNormal.clear();
 }
 
 void Mesh::bounds(Vec3& lo, Vec3& hi) const {
@@ -69,14 +69,14 @@ Vec3 Mesh::centroid() const {
     return V.empty() ? c : c / double(V.size());
 }
 
-void Mesh::normalizeToUnitBox(double targetRadius) {
+void Mesh::normalizeToRadius(double targetRadius) {
     if (V.empty()) return;
     Vec3 lo, hi;
     bounds(lo, hi);
     Vec3 mid = (lo + hi) * 0.5;
-    Vec3 ext = hi - lo;
-    double m = std::max(ext.x, std::max(ext.y, ext.z));
-    double s = (m > 1e-12) ? (2.0 * targetRadius / m) : 1.0;
+    double r = 0;
+    for (const Vec3& p : V) r = std::max(r, length(p - mid));
+    double s = (r > 1e-12) ? (targetRadius / r) : 1.0;
     for (Vec3& p : V) p = (p - mid) * s;
 }
 
@@ -265,6 +265,7 @@ std::vector<RTri> triangulate(const Mesh& m, bool smooth) {
     std::vector<RTri> out;
     if (m.faceNormal.size() != m.F.size() || m.vertexNormal.size() != m.V.size()) return out;
     out.reserve(m.F.size() * 2);
+    const bool haveColor = m.vertexColor.size() == m.V.size();
 
     for (size_t f = 0; f < m.F.size(); f++) {
         const std::vector<int>& face = m.F[f];
@@ -281,6 +282,7 @@ std::vector<RTri> triangulate(const Mesh& m, bool smooth) {
                 for (int k = 0; k < 3; k++) {
                     t.p[k] = m.V[idx[k]];
                     t.n[k] = smooth ? m.vertexNormal[idx[k]] : fn;
+                    if (haveColor) t.c[k] = m.vertexColor[idx[k]];
                 }
                 out.push_back(t);
             }
@@ -289,8 +291,13 @@ std::vector<RTri> triangulate(const Mesh& m, bool smooth) {
             // inside even when the polygon is not convex.
             Vec3 c = m.faceCentroid(int(f));
             Vec3 cn(0, 0, 0);
-            for (int vi : face) cn += m.vertexNormal[vi];
+            Vec3 ccol(0, 0, 0);
+            for (int vi : face) {
+                cn += m.vertexNormal[vi];
+                if (haveColor) ccol += m.vertexColor[vi];
+            }
             cn = (lengthSq(cn) > 1e-24) ? normalize(cn) : fn;
+            ccol /= double(n);
             for (int i = 0; i < n; i++) {
                 int a = face[i], b = face[(i + 1) % n];
                 RTri t;
@@ -298,6 +305,7 @@ std::vector<RTri> triangulate(const Mesh& m, bool smooth) {
                 t.p[0] = c;      t.n[0] = smooth ? cn : fn;
                 t.p[1] = m.V[a]; t.n[1] = smooth ? m.vertexNormal[a] : fn;
                 t.p[2] = m.V[b]; t.n[2] = smooth ? m.vertexNormal[b] : fn;
+                if (haveColor) { t.c[0] = ccol; t.c[1] = m.vertexColor[a]; t.c[2] = m.vertexColor[b]; }
                 out.push_back(t);
             }
         }
@@ -522,7 +530,7 @@ Mesh makeBaseMesh(BaseMesh b) {
         }
         default: break;
     }
-    m.normalizeToUnitBox(1.0);
+    m.normalizeToRadius(1.0);
     m.computeNormals();
     return m;
 }
