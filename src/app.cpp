@@ -69,12 +69,26 @@ std::vector<std::string> schemeRule(SurfScheme s) {
 
 int AppState::maxLevel() const {
     switch (mode) {
-        case Mode::Curve:   return 8;
-        case Mode::Terrain: return 8;
+        case Mode::Curve:   return kMaxCurveLevel;
+        case Mode::Terrain: return kMaxTerrainLevel;
         case Mode::Compare: return 4;
-        case Mode::Levels:  return 3;
-        default:            return 5;
+        // Levels mode shows four consecutive levels, so the first one can go no
+        // higher than kMaxSurfaceLevel - 3.
+        case Mode::Levels:  return kMaxSurfaceLevel - 3;
+        default:            return kMaxSurfaceLevel;
     }
+}
+
+void AppState::clampToLimits() {
+    level = int(clampd(level, 0, maxLevel()));
+    curveLevel = int(clampd(curveLevel, 0, kMaxCurveLevel));
+    terrain.levels = int(clampd(terrain.levels, 1, kMaxTerrainLevel));
+    terrain.roughness = clampd(terrain.roughness, 0.0, 1.0);
+    const int n = presetCurveCount();
+    curvePreset = ((curvePreset % n) + n) % n;
+    double lo, hi;
+    curveParamRange(curveScheme, lo, hi);
+    curveParam = clampd(curveParam, lo, hi);
 }
 
 double AppState::defaultCamDistance() const {
@@ -90,6 +104,7 @@ void AppState::resetCamera() {
 }
 
 void AppState::recompute() {
+    clampToLimits();
     switch (mode) {
         case Mode::Surface: {
             cage_ = makeBaseMesh(base);
@@ -135,7 +150,7 @@ void AppState::recompute() {
             Topology ct = buildTopology(cage_);
             cageStats_ = computeStats(cage_, ct);
             for (int i = 0; i < 4; i++) {
-                lvl_[i] = subdivide(cage_, scheme, i, 120000);
+                lvl_[i] = subdivide(cage_, scheme, levelsWindowStart() + i, 120000);
                 Topology t = buildTopology(lvl_[i].mesh);
                 lvlStats_[i] = computeStats(lvl_[i].mesh, t);
             }
@@ -313,6 +328,7 @@ bool handleKey(AppState& st, int ch, bool& quit) {
         case '5': st.mode = Mode::Levels;  st.resetCamera(); st.recompute(); return true;
 
         case 's':
+            if (st.mode == Mode::Terrain) return false;   // no scheme to cycle
             if (st.mode == Mode::Curve) {
                 st.curveScheme = CurveScheme(((int(st.curveScheme) + 1) % int(CurveScheme::Count)));
                 st.curveParam = curveParamDefault(st.curveScheme);
@@ -324,6 +340,7 @@ bool handleKey(AppState& st, int ch, bool& quit) {
             st.recompute();
             return true;
         case 'S':
+            if (st.mode == Mode::Terrain) return false;
             if (st.mode == Mode::Curve) {
                 st.curveScheme = CurveScheme((int(st.curveScheme) + int(CurveScheme::Count) - 1) %
                                              int(CurveScheme::Count));
@@ -338,11 +355,13 @@ bool handleKey(AppState& st, int ch, bool& quit) {
             return true;
 
         case 'm':
+            if (st.mode == Mode::Terrain) return false;   // no cage to cycle
             if (st.mode == Mode::Curve) st.curvePreset = (st.curvePreset + 1) % presetCurveCount();
             else st.base = BaseMesh((int(st.base) + 1) % int(BaseMesh::Count));
             st.recompute();
             return true;
         case 'M':
+            if (st.mode == Mode::Terrain) return false;
             if (st.mode == Mode::Curve)
                 st.curvePreset = (st.curvePreset + presetCurveCount() - 1) % presetCurveCount();
             else
@@ -386,11 +405,18 @@ bool handleKey(AppState& st, int ch, bool& quit) {
             return true;
         }
 
-        case 'e': case 'E':
-            st.curveSeed = st.curveSeed * 1664525u + 1013904223u;
-            st.terrain.seed = st.terrain.seed * 1664525u + 1013904223u;
+        case 'e': case 'E': {
+            // Only the active mode's generator is re-rolled, so switching modes
+            // does not silently change the other one's terrain or curve.
+            if (st.mode == Mode::Terrain)
+                st.terrain.seed = st.terrain.seed * 1664525u + 1013904223u;
+            else if (st.mode == Mode::Curve && st.curveScheme == CurveScheme::Midpoint)
+                st.curveSeed = st.curveSeed * 1664525u + 1013904223u;
+            else
+                return false;
             st.recompute();
             return true;
+        }
 
         case 'w': case 'W': st.showWire = !st.showWire; return true;
         case 'c': case 'C': st.showCage = !st.showCage; return true;
@@ -432,6 +458,10 @@ std::string statusLine(const AppState& st) {
             std::snprintf(buf, sizeof buf, "%s | level %d | %dx%d grid | roughness %.2f",
                           modeName(st.mode), st.terrain.levels, st.terr_.gridSize,
                           st.terr_.gridSize, st.terrain.roughness);
+            break;
+        case Mode::Levels:
+            std::snprintf(buf, sizeof buf, "%s | %s | %s | levels %d-%d", modeName(st.mode),
+                          baseMeshName(st.base), schemeName(st.scheme), st.level, st.level + 3);
             break;
         default:
             std::snprintf(buf, sizeof buf, "%s | %s | level %d", modeName(st.mode),

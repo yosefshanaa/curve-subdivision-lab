@@ -93,8 +93,18 @@ struct AppState {
     // True for the modes drawn as a 2x2 grid of viewports.
     bool isTiled() const { return mode == Mode::Compare || mode == Mode::Levels; }
 
+    // Force every parameter back into its documented range. Called by
+    // recompute(), so command-line values and key presses are held to the same
+    // limits instead of running off into 400 000-face territory.
+    void clampToLimits();
+
     void recompute();
     int maxLevel() const;
+    // Levels mode tiles four consecutive levels starting here.
+    int levelsWindowStart() const { return level; }
+    static constexpr int kMaxSurfaceLevel = 5;
+    static constexpr int kMaxCurveLevel = 8;
+    static constexpr int kMaxTerrainLevel = 8;
     double defaultCamDistance() const;
     void resetCamera();
 };

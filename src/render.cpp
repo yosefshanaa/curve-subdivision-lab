@@ -350,11 +350,6 @@ void Renderer::drawGroundGrid(double extent, int divisions, double y, Vec3 color
     }
 }
 
-void Renderer::drawAxes(double len) {
-    drawLine3D(Vec3(0, 0, 0), Vec3(len, 0, 0), Vec3(0.90, 0.36, 0.38), 1.6);
-    drawLine3D(Vec3(0, 0, 0), Vec3(0, len, 0), Vec3(0.40, 0.82, 0.45), 1.6);
-    drawLine3D(Vec3(0, 0, 0), Vec3(0, 0, len), Vec3(0.36, 0.60, 0.95), 1.6);
-}
 
 bool Renderer::projectToCanvas(Vec3 p, double& outX, double& outY) const {
     Vec4 c = vp_ * Vec4(p, 1.0);

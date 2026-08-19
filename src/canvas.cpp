@@ -45,12 +45,6 @@ void Canvas::rect(int x, int y, int rw, int rh, Vec3 c, double a) {
         for (int xx = x0; xx < x1; xx++) blend(xx, yy, c, a);
 }
 
-void Canvas::rectOutline(int x, int y, int rw, int rh, Vec3 c, double a, int t) {
-    rect(x, y, rw, t, c, a);
-    rect(x, y + rh - t, rw, t, c, a);
-    rect(x, y + t, t, rh - 2 * t, c, a);
-    rect(x + rw - t, y + t, t, rh - 2 * t, c, a);
-}
 
 namespace {
 // Signed distance to a rounded rectangle, used for anti-aliased panel corners.

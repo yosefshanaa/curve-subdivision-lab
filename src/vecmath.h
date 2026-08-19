@@ -72,7 +72,6 @@ inline Vec3 vmax(Vec3 a, Vec3 b) { return {std::max(a.x, b.x), std::max(a.y, b.y
 inline Vec3 clamp01(Vec3 a) {
     return {clampd(a.x, 0, 1), clampd(a.y, 0, 1), clampd(a.z, 0, 1)};
 }
-inline Vec3 reflect(Vec3 incident, Vec3 n) { return incident - n * (2.0 * dot(incident, n)); }
 
 // ---------------------------------------------------------------- Vec4
 
@@ -157,13 +156,6 @@ struct Mat4 {
         return r;
     }
 
-    static Mat4 orthographic(double l, double r_, double b, double t, double n, double f) {
-        Mat4 r = identity();
-        r.m[0][0] = 2.0 / (r_ - l);   r.m[0][3] = -(r_ + l) / (r_ - l);
-        r.m[1][1] = 2.0 / (t - b);    r.m[1][3] = -(t + b) / (t - b);
-        r.m[2][2] = -2.0 / (f - n);   r.m[2][3] = -(f + n) / (f - n);
-        return r;
-    }
 };
 
 inline Mat4 operator*(const Mat4& a, const Mat4& b) {
@@ -183,54 +175,5 @@ inline Vec4 operator*(const Mat4& a, const Vec4& v) {
             a.m[2][0] * v.x + a.m[2][1] * v.y + a.m[2][2] * v.z + a.m[2][3] * v.w,
             a.m[3][0] * v.x + a.m[3][1] * v.y + a.m[3][2] * v.z + a.m[3][3] * v.w};
 }
-
-// Transform a point (w = 1) and divide out w — for direct point mapping.
-inline Vec3 transformPoint(const Mat4& a, Vec3 p) {
-    Vec4 r = a * Vec4(p, 1.0);
-    if (std::fabs(r.w) > 1e-15 && std::fabs(r.w - 1.0) > 1e-15) return r.xyz() / r.w;
-    return r.xyz();
-}
-
-// Transform a direction (w = 0) — ignores translation.
-inline Vec3 transformDir(const Mat4& a, Vec3 d) { return (a * Vec4(d, 0.0)).xyz(); }
-
-inline Mat4 transpose(const Mat4& a) {
-    Mat4 r;
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++) r.m[i][j] = a.m[j][i];
-    return r;
-}
-
-// General 4x4 inverse (Gauss-Jordan). Used for the normal matrix.
-inline Mat4 inverse(const Mat4& a) {
-    double aug[4][8];
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) aug[i][j] = a.m[i][j];
-        for (int j = 0; j < 4; j++) aug[i][4 + j] = (i == j) ? 1.0 : 0.0;
-    }
-    for (int col = 0; col < 4; col++) {
-        int piv = col;
-        for (int r = col + 1; r < 4; r++)
-            if (std::fabs(aug[r][col]) > std::fabs(aug[piv][col])) piv = r;
-        if (std::fabs(aug[piv][col]) < 1e-15) return Mat4::identity();  // singular
-        if (piv != col)
-            for (int j = 0; j < 8; j++) std::swap(aug[col][j], aug[piv][j]);
-        double inv = 1.0 / aug[col][col];
-        for (int j = 0; j < 8; j++) aug[col][j] *= inv;
-        for (int r = 0; r < 4; r++) {
-            if (r == col) continue;
-            double f = aug[r][col];
-            if (f == 0.0) continue;
-            for (int j = 0; j < 8; j++) aug[r][j] -= f * aug[col][j];
-        }
-    }
-    Mat4 out;
-    for (int i = 0; i < 4; i++)
-        for (int j = 0; j < 4; j++) out.m[i][j] = aug[i][4 + j];
-    return out;
-}
-
-// The matrix that transforms normals correctly under non-uniform scale.
-inline Mat4 normalMatrix(const Mat4& model) { return transpose(inverse(model)); }
 
 }  // namespace sl

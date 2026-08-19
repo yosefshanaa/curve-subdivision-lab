@@ -56,12 +56,6 @@ struct Layout {
         y += 20;
     }
 
-    void title(const std::string& s, Vec3 c) {
-        if (!room(textLineHeight(Face::UIBold))) return;
-        drawTextTop(cv, Face::UIBold, x, y, s, c);
-        y += textLineHeight(Face::UIBold) + 1;
-    }
-
     void body(const std::string& s, Vec3 c) {
         if (!room(textLineHeight(Face::UI))) return;
         drawTextTop(cv, Face::UI, x, y, s, c);
@@ -110,7 +104,7 @@ void drawLevelTicks(Canvas& cv, int x, int y, int w, int level, int maxLevel, Ve
 // Log-scaled bars: subdivision multiplies the face count by ~4 per level, so a
 // linear chart would show one visible bar and five slivers.
 void drawGrowthChart(Canvas& cv, int x, int y, int w, int h, const std::vector<int>& counts,
-                     Vec3 c) {
+                     Vec3 c, int labelOffset = 0) {
     if (counts.size() < 2) return;
     double maxLog = 0;
     for (int v : counts) maxLog = std::max(maxLog, std::log2(std::max(1, v) + 1.0));
@@ -124,8 +118,9 @@ void drawGrowthChart(Canvas& cv, int x, int y, int w, int h, const std::vector<i
         int bh = std::max(2, int(t * h));
         int bx = x + i * (bw + gap);
         cv.roundRect(bx, y + h - bh, bw, bh, 2, c, i == n - 1 ? 1.0 : 0.45);
-        drawTextTop(cv, Face::Mono, bx + bw / 2 - textWidth(Face::Mono, std::to_string(i)) / 2,
-                    y + h + 3, std::to_string(i), theme::textFaint);
+        std::string lab = std::to_string(i + labelOffset);
+        drawTextTop(cv, Face::Mono, bx + bw / 2 - textWidth(Face::Mono, lab) / 2,
+                    y + h + 3, lab, theme::textFaint);
     }
 }
 
@@ -212,19 +207,23 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
                fmt("%d V · %d F", st.cageStats_.verts, st.cageStats_.faces), theme::cage);
         L.gap(8);
 
-        L.sectionLabel("LEVEL");
+        L.sectionLabel(st.mode == Mode::Levels ? "LEVELS SHOWN" : "LEVEL");
         drawLevelTicks(cv, L.x, L.y + 4, L.w, st.level, st.maxLevel(),
                        st.mode == Mode::Compare ? theme::accent : schemeColor(st.scheme));
         L.y += 16;
-        L.stat(fmt("%d of %d", st.level, st.maxLevel()),
-               st.mode == Mode::Surface ? fmt("%.1f ms", st.surf_.milliseconds) : "",
-               theme::textDim);
+        if (st.mode == Mode::Levels)
+            L.stat(fmt("%d\u2013%d of %d", st.level, st.level + 3, AppState::kMaxSurfaceLevel),
+                   "", theme::textDim);
+        else
+            L.stat(fmt("%d of %d", st.level, st.maxLevel()),
+                   st.mode == Mode::Surface ? fmt("%.1f ms", st.surf_.milliseconds) : "",
+                   theme::textDim);
         L.gap(6);
 
         if (st.mode == Mode::Levels) {
             L.sectionLabel("EACH TILE, ONE LEVEL");
             for (int i = 0; i < 4; i++)
-                L.stat(fmt("level %d", i),
+                L.stat(fmt("level %d", st.level + i),
                        fmt("%s V · %s F", withThousands(st.lvlStats_[i].verts).c_str(),
                            withThousands(st.lvlStats_[i].faces).c_str()),
                        i == 3 ? schemeColor(st.scheme) : theme::textDim);
@@ -233,7 +232,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             {
                 std::vector<int> hist;
                 for (int i = 0; i < 4; i++) hist.push_back(st.lvlStats_[i].faces);
-                drawGrowthChart(cv, L.x, L.y, L.w, 42, hist, schemeColor(st.scheme));
+                drawGrowthChart(cv, L.x, L.y, L.w, 42, hist, schemeColor(st.scheme), st.level);
                 L.y += 42 + 20;
             }
             L.body("Every level multiplies the face", theme::textDim);
@@ -430,7 +429,8 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             items.push_back({shadingName(st.shading), {theme::accent2, true}});
             items.push_back({"wire", {theme::accent, st.showWire}});
         }
-        items.push_back({curveMode ? "polygon" : "cage", {theme::cage, st.showCage}});
+        if (st.mode != Mode::Terrain)
+            items.push_back({curveMode ? "polygon" : "cage", {theme::cage, st.showCage}});
         items.push_back({"grid", {theme::textDim, st.showGrid}});
         if (st.mode == Mode::Surface)
             items.push_back({"extraordinary", {theme::hot, st.showExtraordinary}});
@@ -471,7 +471,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             cv.roundRectOutline(vx, vy, vw, vh, 8, theme::panelEdge, 0.5);
             std::string label =
                 cmpMode ? fmt("%s · %s", schemeName(s), schemeKind(s))
-                        : fmt("level %d · %s faces", i,
+                        : fmt("level %d · %s faces", st.level + i,
                               withThousands(st.lvlStats_[i].faces).c_str());
             int tw = textWidth(Face::UIBold, label);
             cv.roundRect(vx + 12, vy + 12, tw + 42, 26, 13, theme::panel, 0.88);

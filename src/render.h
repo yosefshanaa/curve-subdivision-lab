@@ -111,7 +111,6 @@ public:
     void drawPolyline3D(const std::vector<Vec3>& pts, bool closed, Vec3 color, double thickness,
                         double bias = 2e-3, double alpha = 1.0);
     void drawGroundGrid(double extent, int divisions, double y, Vec3 color, double alpha);
-    void drawAxes(double len);
 
     // Project a world point to resolved-canvas pixels; false if behind the eye.
     bool projectToCanvas(Vec3 p, double& outX, double& outY) const;

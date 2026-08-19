@@ -26,8 +26,9 @@ each item was *verified*, not just that it was written.
 
 ### Math and I/O
 - [x] 1.1 `vecmath.h`: Vec2/3/4, row-major `Mat4` with a column-vector
-      convention, `lookAt`, `perspective`, `orthographic`, Gauss–Jordan inverse,
-      normal matrix.
+      convention, `lookAt` and `perspective`.
+      *Kept deliberately small — anything the renderer does not actually call
+      was removed rather than left in as unused API.*
 - [x] 1.2 `png.{h,cpp}`: PNG writer with its own DEFLATE (LZ77 + fixed
       Huffman), Adler-32, CRC-32 and adaptive scanline filtering.
       *Verified: a 640×400 test image round-trips byte-identically through
@@ -159,6 +160,15 @@ each item was *verified*, not just that it was written.
 - [x] 4.4 Curve parameters default per scheme, so switching to Four-Point does
       not land on an accidental fractal weight.
 - [x] 4.5 Auto-spin, in-app PNG capture (`P`), and window-title status line.
+- [x] 4.6 Every parameter clamped to its documented range in one place
+      (`AppState::clampToLimits`), so command-line values and key presses obey
+      the same limits.
+      *Verified with a sweep of out-of-range inputs: `--level 99` lands on 5,
+      `--curve-level 99` on 8, `--roughness 5` on 1.0, `--ss 0` on 1.*
+- [x] 4.7 Levels mode slides a four-level window (`[` / `]`) instead of always
+      showing 0–3, so its level control is meaningful.
+- [x] 4.8 Keys that cannot apply in the active mode do nothing instead of
+      silently changing hidden state.
 
 ---
 

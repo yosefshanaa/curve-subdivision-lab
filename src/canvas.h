@@ -39,7 +39,6 @@ struct Canvas {
     void blend(int x, int y, Vec3 c, double a);
 
     void rect(int x, int y, int rw, int rh, Vec3 c, double a = 1.0);
-    void rectOutline(int x, int y, int rw, int rh, Vec3 c, double a = 1.0, int thickness = 1);
     void roundRect(int x, int y, int rw, int rh, int radius, Vec3 c, double a = 1.0);
     void roundRectOutline(int x, int y, int rw, int rh, int radius, Vec3 c, double a = 1.0);
     void line(double x0, double y0, double x1, double y1, Vec3 c, double a = 1.0,

@@ -85,6 +85,7 @@ bool parseArgs(int argc, char** argv, Options& o) {
         else if (a == "--width")    o.width = std::atoi(need(i));
         else if (a == "--height")   o.height = std::atoi(need(i));
         else if (a == "--ss")       { o.ss = std::atoi(need(i)); o.ssSet = true; }
+        else if (a == "--supersample") { o.ss = std::atoi(need(i)); o.ssSet = true; }
         else if (a == "--level")    o.st.level = std::atoi(need(i));
         else if (a == "--curve-level")  o.st.curveLevel = std::atoi(need(i));
         else if (a == "--curve-preset") o.st.curvePreset = std::atoi(need(i));
@@ -123,6 +124,11 @@ bool parseArgs(int argc, char** argv, Options& o) {
     // Each curve scheme has its own natural parameter; only override the
     // default when the caller actually asked for a value.
     if (!o.curveParamSet) o.st.curveParam = curveParamDefault(o.st.curveScheme);
+    // Hold command-line values to the same limits the keyboard obeys.
+    o.width = std::max(64, std::min(o.width, 8192));
+    o.height = std::max(64, std::min(o.height, 8192));
+    o.ss = std::max(1, std::min(o.ss, 4));
+    o.st.clampToLimits();
     return true;
 }
 
