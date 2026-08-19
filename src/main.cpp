@@ -255,6 +255,27 @@ int runSelftest() {
     }
     check(failures == 0, "40 mesh/scheme combinations keep their Euler characteristic");
 
+    std::printf("\nOrientation: every refined face is wound consistently with its neighbours\n");
+    {
+        int before = failures;
+        for (int b = 0; b < int(BaseMesh::Count); b++) {
+            Mesh cage = makeBaseMesh(BaseMesh(b));
+            if (orientationDefects(cage) != 0) {
+                check(false, std::string("cage ") + baseMeshName(BaseMesh(b)));
+                continue;
+            }
+            for (int s = 1; s < int(SurfScheme::Count); s++) {
+                SubdivResult r = subdivide(cage, SurfScheme(s), 3);
+                int d = orientationDefects(r.mesh);
+                if (d != 0)
+                    check(false, std::string(baseMeshName(BaseMesh(b))) + " / " +
+                                     schemeName(SurfScheme(s)) + ": " + std::to_string(d) +
+                                     " directed-edge defects");
+            }
+        }
+        check(failures == before, "no directed-edge defects in 40 refined meshes or 10 cages");
+    }
+
     std::printf("\nKnown refinement counts on the cube\n");
     Mesh cube = makeBaseMesh(BaseMesh::Cube);
     {

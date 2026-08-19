@@ -283,10 +283,12 @@ void X11Window::waitEvent(int timeoutMs) {
 }
 
 bool X11Window::poll(WindowEvent& out) {
-    out = WindowEvent{};
     if (!dpy_) return false;
-    if (g.XPending(dpy_) <= 0) return false;
 
+    // Loop rather than recurse: events we ignore (wheel releases, no-op
+    // configures, other client messages) just advance to the next one.
+    while (g.XPending(dpy_) > 0) {
+    out = WindowEvent{};
     XEventBuf ev;
     g.XNextEvent(dpy_, &ev);
     switch (ev.type()) {
@@ -319,7 +321,7 @@ bool X11Window::poll(WindowEvent& out) {
             out.x = b->x;
             out.y = b->y;
             if (b->button == 4 || b->button == 5) {
-                if (ev.type() == kButtonRelease) return poll(out);   // wheel: press only
+                if (ev.type() == kButtonRelease) continue;   // wheel: press only
                 out.type = WindowEvent::Wheel;
                 out.dir = (b->button == 4) ? 1 : -1;
             } else {
@@ -347,7 +349,7 @@ bool X11Window::poll(WindowEvent& out) {
                 out.h = h_;
                 return true;
             }
-            return poll(out);
+            continue;
         }
         case kExpose: {
             out.type = WindowEvent::Resize;   // treat as "redraw needed"
@@ -361,11 +363,14 @@ bool X11Window::poll(WindowEvent& out) {
                 out.type = WindowEvent::Close;
                 return true;
             }
-            return poll(out);
+            continue;
         }
         default:
-            return poll(out);
+            continue;
     }
+    }
+    out = WindowEvent{};
+    return false;
 }
 
 }  // namespace sl

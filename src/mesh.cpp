@@ -259,6 +259,21 @@ MeshStats computeStats(const Mesh& m, const Topology& t) {
     return s;
 }
 
+int orientationDefects(const Mesh& m) {
+    std::map<std::pair<int, int>, int> seen;
+    for (const auto& f : m.F) {
+        int n = int(f.size());
+        for (int i = 0; i < n; i++) seen[{f[i], f[(i + 1) % n]}]++;
+    }
+    int defects = 0;
+    for (const auto& kv : seen) {
+        if (kv.second != 1) defects++;                     // same direction twice
+        auto rev = seen.find({kv.first.second, kv.first.first});
+        if (rev != seen.end() && rev->second != kv.second) defects++;
+    }
+    return defects;
+}
+
 // -------------------------------------------------------------- rendering
 
 std::vector<RTri> triangulate(const Mesh& m, bool smooth) {

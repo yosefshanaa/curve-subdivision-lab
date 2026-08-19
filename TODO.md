@@ -80,6 +80,9 @@ each item was *verified*, not just that it was written.
 - [x] 2.8 Cross-check every scheme against the topology.
       *Verified: 4 schemes × 10 cages × 3 levels = 120 refinements, all
       preserving the Euler characteristic of their input and all manifold.*
+- [x] 2.9 `orientationDefects()`: directed-edge audit, promoted from a
+      throwaway debugging script to a permanent check.
+      *Verified: zero defects across the same 120 refinements and all 10 cages.*
 
 ---
 
@@ -131,8 +134,9 @@ each item was *verified*, not just that it was written.
       colours, so the visual masks and byte order are right.*
 - [x] 3.19 CLI: `--shot`, `--gallery`, `--selftest`, scene and view options,
       `--help`.
-- [x] 3.20 `--selftest` with 15 checks covering topology, known counts,
-      interpolation, boundary rules, curve schemes, budgets and the renderer.
+- [x] 3.20 `--selftest` with 16 checks covering topology, orientation, known
+      counts, interpolation, boundary rules, curve schemes, budgets and the
+      renderer.
 - [x] 3.21 Makefile: `all`, `run`, `test`, `screenshots`, `font`, `clean`,
       `help`, with dependency generation.
       *Verified: `ldd subdivlab` lists only libc, libm, libstdc++ and libgcc.*

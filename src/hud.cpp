@@ -7,6 +7,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "app.h"
@@ -41,10 +42,13 @@ struct Layout {
     Canvas& cv;
     int x, w;
     int y;
+    int limit = 1 << 30;   // hard bottom: nothing is drawn past this
 
+    bool room(int need) const { return y + need <= limit; }
     void gap(int px) { y += px; }
 
     void sectionLabel(const std::string& s) {
+        if (!room(20)) return;
         // Small caps-ish section header with a hairline to its right.
         drawTextTop(cv, Face::UIBold, x, y, s, theme::textFaint);
         int tw = textWidth(Face::UIBold, s);
@@ -53,28 +57,43 @@ struct Layout {
     }
 
     void title(const std::string& s, Vec3 c) {
+        if (!room(textLineHeight(Face::UIBold))) return;
         drawTextTop(cv, Face::UIBold, x, y, s, c);
         y += textLineHeight(Face::UIBold) + 1;
     }
 
     void body(const std::string& s, Vec3 c) {
+        if (!room(textLineHeight(Face::UI))) return;
         drawTextTop(cv, Face::UI, x, y, s, c);
         y += textLineHeight(Face::UI);
     }
 
     // label on the left, mono value flushed right — the "readout" look.
     void stat(const std::string& label, const std::string& value, Vec3 vc) {
+        if (!room(textLineHeight(Face::UI))) return;
         drawTextTop(cv, Face::UI, x, y, label, theme::textDim);
         int vw = textWidth(Face::MonoBold, value);
         drawTextTop(cv, Face::MonoBold, x + w - vw, y, value, vc);
         y += textLineHeight(Face::UI) + 2;
     }
 
-    void chipRow(const std::string& s, Vec3 c, bool on) {
-        cv.roundRect(x, y + 3, 8, 8, 2, c, on ? 1.0 : 0.25);
-        drawTextTop(cv, Face::UI, x + 16, y, s, on ? theme::text : theme::textFaint);
-        y += textLineHeight(Face::UI) + 1;
+    // Several small chips flowed onto as few lines as possible.
+    void chips(const std::vector<std::pair<std::string, std::pair<Vec3, bool>>>& items) {
+        int cx = x;
+        const int lh = textLineHeight(Face::UI);
+        for (const auto& it : items) {
+            int tw = textWidth(Face::UI, it.first) + 16;
+            if (cx > x && cx + tw > x + w) { cx = x; y += lh + 2; }
+            if (!room(lh)) return;
+            const Vec3& c = it.second.first;
+            bool on = it.second.second;
+            cv.roundRect(cx, y + 4, 7, 7, 2, c, on ? 1.0 : 0.22);
+            drawTextTop(cv, Face::UI, cx + 12, y, it.first, on ? theme::text : theme::textFaint);
+            cx += tw;
+        }
+        y += lh + 2;
     }
+
 };
 
 // A level slider with tick marks: filled ticks up to the current level.
@@ -128,12 +147,12 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
     cv.roundRect(PX, PY, PW, PH, 12, theme::panel, 0.93);
     cv.roundRectOutline(PX, PY, PW, PH, 12, theme::panelEdge, 0.9);
 
-    Layout L{cv, PX + 20, PW - 40, PY + 20};
+    Layout L{cv, PX + 20, PW - 40, PY + 20, PY + PH - 32};
 
     // ---- header
     drawTextTop(cv, Face::Title, L.x, L.y, "Subdivision Lab", theme::text);
     L.y += textLineHeight(Face::Title) - 2;
-    drawTextTop(cv, Face::UI, L.x, L.y, "3D surface subdivision · software renderer",
+    drawTextTop(cv, Face::UI, L.x, L.y, "surface subdivision · software renderer",
                 theme::textFaint);
     L.y += textLineHeight(Face::UI) + 14;
 
@@ -257,7 +276,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
                    fi.maxEdgePx < 2.0 ? theme::accent : theme::textDim);
             L.gap(6);
 
-            if (!compact && st.surf_.faceHistory.size() > 1) {
+            if (!compact && L.room(80) && st.surf_.faceHistory.size() > 1) {
                 L.sectionLabel("FACES PER LEVEL  (log)");
                 drawGrowthChart(cv, L.x, L.y, L.w, 42, st.surf_.faceHistory,
                                 schemeColor(st.scheme));
@@ -273,6 +292,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             if (!compact) {
             L.sectionLabel("REFINEMENT RULE");
             for (const std::string& line : schemeRule(st.scheme)) {
+                if (!L.room(textLineHeight(Face::Mono))) break;
                 drawTextTop(cv, Face::Mono, L.x, L.y, line, theme::textDim);
                 L.y += textLineHeight(Face::Mono) + 1;
             }
@@ -329,6 +349,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             else
                 rule = {"keep P, insert the midpoint", "  displaced by +/- r*|edge|/2"};
             for (const std::string& line : rule) {
+                if (!L.room(textLineHeight(Face::Mono))) break;
                 drawTextTop(cv, Face::Mono, L.x, L.y, line, theme::textDim);
                 L.y += textLineHeight(Face::Mono) + 1;
             }
@@ -371,7 +392,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
         L.stat("build time", fmt("%.1f ms", st.terr_.milliseconds), theme::textDim);
         L.gap(10);
 
-        if (!compact && st.terr_.vertHistory.size() > 1) {
+        if (!compact && L.room(80) && st.terr_.vertHistory.size() > 1) {
             L.sectionLabel("VERTICES PER LEVEL  (log)");
             drawGrowthChart(cv, L.x, L.y, L.w, 42, st.terr_.vertHistory, theme::accent);
             L.y += 42 + 20;
@@ -384,6 +405,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
                                   "square:  edge midpoint =",
                                   "  mean of 4 neighbours + random"};
             for (const char* line : rule) {
+                if (!L.room(textLineHeight(Face::Mono))) break;
                 drawTextTop(cv, Face::Mono, L.x, L.y, line, theme::textDim);
                 L.y += textLineHeight(Face::Mono) + 1;
             }
@@ -395,19 +417,24 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
 
     // ---- view section, pinned near the bottom when there is room for it
     const bool curveMode = st.mode == Mode::Curve;
-    const int viewRows = curveMode ? 1 : (st.mode == Mode::Surface ? 4 : 3);
-    const int viewBlock = 24 + viewRows * (textLineHeight(Face::UI) + 1);
+    const int viewBlock = 24 + 2 * (textLineHeight(Face::UI) + 2);   // label + 2 chip rows
     const int viewY = PY + PH - 34 - viewBlock;
-    if (!veryCompact && L.y <= viewY) {
-        L.y = viewY;
+    // Pin it to the bottom when the panel has slack, otherwise let it follow the
+    // content. Only one chip row has to fit to be worth drawing — chips() drops
+    // whatever runs past the limit.
+    if (!veryCompact && L.y + 24 + textLineHeight(Face::UI) <= L.limit) {
+        L.y = std::max(L.y, viewY);
         L.sectionLabel("VIEW");
+        std::vector<std::pair<std::string, std::pair<Vec3, bool>>> items;
         if (!curveMode) {
-            L.chipRow(fmt("shading: %s", shadingName(st.shading)), theme::accent2, true);
-            L.chipRow("wireframe", theme::accent, st.showWire);
+            items.push_back({shadingName(st.shading), {theme::accent2, true}});
+            items.push_back({"wire", {theme::accent, st.showWire}});
         }
-        L.chipRow(curveMode ? "control polygon" : "control cage", theme::cage, st.showCage);
+        items.push_back({curveMode ? "polygon" : "cage", {theme::cage, st.showCage}});
+        items.push_back({"grid", {theme::textDim, st.showGrid}});
         if (st.mode == Mode::Surface)
-            L.chipRow("extraordinary vertices", theme::hot, st.showExtraordinary);
+            items.push_back({"extraordinary", {theme::hot, st.showExtraordinary}});
+        L.chips(items);
     }
 
     // ---- footer

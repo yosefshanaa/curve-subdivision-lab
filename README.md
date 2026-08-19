@@ -222,11 +222,13 @@ A few decisions worth calling out:
 
 ## Verification
 
-`make test` runs 15 checks in about a second:
+`make test` runs 16 checks in about a second:
 
 ```
 Topology: Euler characteristic V-E+F is preserved by every scheme
   [PASS] 40 mesh/scheme combinations keep their Euler characteristic
+Orientation: every refined face is wound consistently with its neighbours
+  [PASS] no directed-edge defects in 40 refined meshes or 10 cages
 Known refinement counts on the cube
   [PASS] Catmull-Clark level 1: 26 V / 48 E / 24 F  (V+E+F of the cage)
   [PASS] Doo-Sabin level 1: 24 V / 48 E / 26 F  (exactly the dual)

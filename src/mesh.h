@@ -101,6 +101,13 @@ struct MeshStats {
 
 MeshStats computeStats(const Mesh& m, const Topology& t);
 
+// Count directed-edge defects. In a consistently oriented manifold every
+// directed edge (a,b) is traversed exactly once, and every interior edge is
+// also traversed once as (b,a). This catches faces that are individually valid
+// but wound backwards relative to their neighbours — a defect that leaves V, E
+// and F (and therefore the Euler characteristic) completely unchanged.
+int orientationDefects(const Mesh& m);
+
 // --------------------------------------------------------------- rendering
 
 // A triangle handed to the rasteriser: positions plus per-corner normals.

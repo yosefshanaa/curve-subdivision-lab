@@ -362,7 +362,6 @@ bool Renderer::projectToCanvas(Vec3 p, double& outX, double& outY) const {
     double iw = 1.0 / c.w;
     outX = (c.x * iw * 0.5 + 0.5) * rt_.w;
     outY = (0.5 - c.y * iw * 0.5) * rt_.h;
-    (void)0;
     return true;
 }
 

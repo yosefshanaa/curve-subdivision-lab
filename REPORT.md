@@ -18,7 +18,7 @@ build and the only requirement is a C++17 compiler.
 | **Rendering** | Own software rasteriser: MVP transforms, near-plane clipping, z-buffer, backface culling, flat/Gouraud/Phong |
 | **Size** | ~5 000 lines of C++ across 21 files, plus a 1 400-line generated font header |
 | **Dependencies** | None. `ldd` shows libc, libm, libstdc++, libgcc |
-| **Verification** | `make test` — 15 checks, including 120 refinements audited for topological correctness |
+| **Verification** | `make test` — 16 checks, including 120 refinements audited for both topology and orientation |
 
 ![Catmull-Clark on a cube](screenshots/01-catmull-clark-cube.png)
 
@@ -152,11 +152,15 @@ fine levels.
 
 ## 3. Correctness
 
-`make test` runs in about a second:
+`make test` runs 16 checks in about a second:
 
 - **Topology.** 4 schemes × 10 cages × 3 levels = 120 refinements. Every one
   preserves the Euler characteristic of its input and produces no non-manifold
   edge.
+- **Orientation.** The same refinements audited by directed edge: every directed
+  edge appears exactly once, and every interior edge appears once in each
+  direction. This is the check that catches backwards-wound faces, which leave
+  V, E, F — and therefore χ — untouched. See §4.1.
 - **Known counts.** Catmull–Clark on the cube gives 26/48/24; Doo–Sabin gives
   24/48/26 with all valences equal to 4.
 - **Interpolation.** Butterfly's displacement of original vertices is exactly
@@ -216,7 +220,9 @@ Two separate bugs:
    direction, which on the cube was 5 of the 12 edges.
 
 After both fixes: χ = 2 at every level, every vertex valence 4, zero
-directed-edge violations. Two lessons generalise. *"It renders correctly" is not
+directed-edge violations. The audit that found the bug is now
+`orientationDefects()` in `mesh.cpp` and runs over all 40 mesh/scheme
+combinations in the self test. Two lessons generalise. *"It renders correctly" is not
 evidence that a mesh operator is correct* — the broken level-1 mesh was
 indistinguishable from the fixed one on screen. And *no single invariant is
 enough*: the Euler characteristic caught the collapse but pointed at the wrong
