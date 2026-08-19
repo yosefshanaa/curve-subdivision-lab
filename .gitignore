@@ -1,0 +1,6 @@
+# Build output
+build/
+subdivlab
+
+# In-app screenshots (P key) land in the working directory
+subdivlab-*.png
