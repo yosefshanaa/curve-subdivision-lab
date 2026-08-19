@@ -328,3 +328,17 @@ the others only need averages over unordered adjacency.
 | [PLAN.md](PLAN.md) | Architecture, the exact stencil for every scheme, the render pipeline |
 | [TODO.md](TODO.md) | Milestone task list, with how each item was verified |
 | [REPORT.md](REPORT.md) | Course report: feature → concept mapping, and the problems actually hit |
+
+### Commit history
+
+This project is also kept as a standalone repository:
+
+**<https://github.com/yosefshanaa/curve-subdivision-lab>**
+
+It is there for the commit history. The same seventeen commits appear in both
+places — ten for the v1 HTML curve app, seven for the C++ rewrite — but in the
+standalone repository they sit at the repo root rather than under
+`FinalProject/`, so the incremental work reads in one place without the rest of
+the course repository interleaved. Only the commit hashes differ, because the
+history was replayed under the `FinalProject/` prefix when it was brought in
+here.
