@@ -44,7 +44,7 @@ void printUsage() {
         "  subdivlab --selftest             verify the schemes numerically\n"
         "\n"
         "Scene:\n"
-        "  --mode surface|curve|terrain|compare\n"
+        "  --mode surface|curve|terrain|compare|levels\n"
         "  --mesh cube|tetrahedron|octahedron|icosahedron|torus|plane|cylinder|\n"
         "         lblock|cross|pyramid\n"
         "  --scheme catmull-clark|loop|doo-sabin|butterfly|none\n"
@@ -61,7 +61,7 @@ void printUsage() {
         "  --extraordinary  --normals\n"
         "\n"
         "Interactive keys:\n"
-        "  1-4 mode   S/shift-S scheme   M/shift-M cage   [ ] level   , . parameter\n"
+        "  1-5 mode   S/shift-S scheme   M/shift-M cage   [ ] level   , . parameter\n"
         "  F shading  W wireframe  C cage  G grid  X extraordinary  N normals\n"
         "  A auto-spin  R reset view  E re-roll seed  H hide HUD  P save PNG  Q quit\n"
         "  drag / arrows orbit, wheel or z/Z zoom\n");
@@ -156,32 +156,38 @@ int runGallery(const std::string& dir, int argc, char** argv) {
     static const Shot shots[] = {
         {"01-catmull-clark-cube.png",
          "--mode surface --mesh cube --scheme catmull-clark --level 3 --yaw 0.68 --pitch 0.38"},
-        {"02-scheme-comparison.png",
+        {"02-level-progression.png",
+         "--mode levels --mesh cube --scheme catmull-clark --yaw 0.68 --pitch 0.38"},
+        {"03-four-schemes-compared.png",
          "--mode compare --mesh cube --level 2 --yaw 0.72 --pitch 0.36"},
-        {"03-butterfly-interpolating.png",
-         "--mode surface --mesh octahedron --scheme butterfly --level 3 --yaw 0.9 --pitch 0.3"},
-        {"04-loop-icosahedron.png",
+        {"04-butterfly-interpolating.png",
+         "--mode surface --mesh octahedron --scheme butterfly --level 3 --yaw 0.9 --pitch 0.30"},
+        {"05-loop-icosahedron.png",
          "--mode surface --mesh icosahedron --scheme loop --level 3 --yaw 0.5 --pitch 0.30"},
-        {"05-extraordinary-vertices.png",
-         "--mode surface --mesh cross --scheme catmull-clark --level 3 --extraordinary "
-         "--yaw 0.85 --pitch 0.45"},
-        {"06-boundary-rules.png",
-         "--mode surface --mesh plane --scheme catmull-clark --level 3 --yaw 0.75 --pitch 0.55 "
-         "--dist 4.0"},
-        {"07-doo-sabin-dual.png",
+        {"06-doo-sabin-dual.png",
          "--mode surface --mesh lblock --scheme doo-sabin --level 3 --yaw 1.05 --pitch 0.42"},
-        {"08-shading-levels.png",
+        {"07-extraordinary-vertices.png",
+         "--mode surface --mesh cross --scheme catmull-clark --level 3 --extraordinary "
+         "--no-cage --yaw 0.85 --pitch 0.45"},
+        {"08-boundary-rules.png",
+         "--mode surface --mesh plane --scheme catmull-clark --level 3 --yaw 0.75 --pitch 0.55 "
+         "--dist 4.2"},
+        {"09-flat-shading.png",
          "--mode surface --mesh torus --scheme catmull-clark --level 2 --shading flat "
-         "--yaw 0.7 --pitch 0.62"},
-        {"09-curve-schemes.png",
-         "--mode curve --curve-scheme four-point --curve-preset 0 --curve-level 5 "
+         "--no-cage --no-wire --yaw 0.7 --pitch 0.62"},
+        {"10-phong-shading.png",
+         "--mode surface --mesh torus --scheme catmull-clark --level 2 --shading phong "
+         "--no-cage --no-wire --yaw 0.7 --pitch 0.62"},
+        {"11-curve-four-point.png",
+         "--mode curve --curve-scheme four-point --curve-preset 0 --curve-level 6 "
          "--yaw 0.5 --pitch 0.85 --dist 3.6"},
-        {"10-terrain-diamond-square.png",
+        {"12-curve-fractal-weight.png",
+         "--mode curve --curve-scheme four-point --curve-preset 0 --curve-level 6 "
+         "--curve-param 0.25 --yaw 0.5 --pitch 0.85 --dist 3.6"},
+        {"13-terrain-diamond-square.png",
          "--mode terrain --terrain-level 7 --roughness 0.55 --seed 20260819 "
-         "--yaw 0.9 --pitch 0.42 --dist 3.2"},
-        {"11-level-zero-cage.png",
-         "--mode surface --mesh cube --scheme catmull-clark --level 0 --yaw 0.68 --pitch 0.38"},
-        {"12-wireframe-density.png",
+         "--yaw 0.9 --pitch 0.42"},
+        {"14-wireframe-density.png",
          "--mode surface --mesh pyramid --scheme catmull-clark --level 4 --no-cage "
          "--yaw 0.6 --pitch 0.30"},
     };

@@ -37,6 +37,7 @@ CODEPOINTS = list(range(32, 127)) + [
     0x03C0,  # pi
     0x03C7,  # chi
     0x2013,  # en dash
+    0x2014,  # em dash
     0x2192,  # right arrow
     0x2212,  # minus sign
     0x2248,  # almost equal

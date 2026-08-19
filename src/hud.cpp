@@ -121,6 +121,9 @@ void drawBadge(Canvas& cv, int x, int y, const std::string& s, Vec3 fg, Vec3 bg)
 void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
     const int PX = 22, PY = 20, PW = 306;
     const int PH = cv.h - PY * 2;
+    // Optional blocks are dropped on short windows so the panel never overflows.
+    const bool compact = PH < 720;
+    const bool veryCompact = PH < 560;
 
     cv.roundRect(PX, PY, PW, PH, 12, theme::panel, 0.93);
     cv.roundRectOutline(PX, PY, PW, PH, 12, theme::panelEdge, 0.9);
@@ -136,11 +139,12 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
 
     // ---- mode tabs
     {
-        const char* names[4] = {"Surface", "Curve", "Terrain", "Compare"};
+        const char* names[5] = {"Surface", "Curve", "Terrain", "Compare", "Levels"};
         int bx = L.x;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 5; i++) {
             bool on = int(st.mode) == i;
             int tw = textWidth(Face::UIBold, names[i]) + 16;
+            if (bx + tw > L.x + L.w) { bx = L.x; L.y += 27; }
             cv.roundRect(bx, L.y, tw, 22, 6, on ? theme::accent : theme::panelEdge, on ? 0.9 : 0.55);
             drawTextTop(cv, Face::UIBold, bx + 8, L.y + 4, names[i],
                         on ? rgb(0x0E1A16) : theme::textDim);
@@ -149,9 +153,10 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
         L.y += 34;
     }
 
-    if (st.mode == Mode::Surface || st.mode == Mode::Compare) {
+    if (st.mode != Mode::Curve && st.mode != Mode::Terrain) {
         // ---- scheme card
         L.sectionLabel(st.mode == Mode::Compare ? "SCHEMES" : "SCHEME");
+        // Levels mode shows one scheme, like Surface does.
         if (st.mode == Mode::Compare) {
             for (int i = 0; i < 4; i++) {
                 SurfScheme s = AppState::kCompareSchemes[i];
@@ -193,9 +198,30 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
                        st.mode == Mode::Compare ? theme::accent : schemeColor(st.scheme));
         L.y += 16;
         L.stat(fmt("%d of %d", st.level, st.maxLevel()),
-               st.mode == Mode::Compare ? "" : fmt("%.1f ms", st.surf_.milliseconds),
+               st.mode == Mode::Surface ? fmt("%.1f ms", st.surf_.milliseconds) : "",
                theme::textDim);
         L.gap(6);
+
+        if (st.mode == Mode::Levels) {
+            L.sectionLabel("EACH TILE, ONE LEVEL");
+            for (int i = 0; i < 4; i++)
+                L.stat(fmt("level %d", i),
+                       fmt("%s V · %s F", withThousands(st.lvlStats_[i].verts).c_str(),
+                           withThousands(st.lvlStats_[i].faces).c_str()),
+                       i == 3 ? schemeColor(st.scheme) : theme::textDim);
+            L.gap(10);
+            L.sectionLabel("FACES PER LEVEL  (log)");
+            {
+                std::vector<int> hist;
+                for (int i = 0; i < 4; i++) hist.push_back(st.lvlStats_[i].faces);
+                drawGrowthChart(cv, L.x, L.y, L.w, 42, hist, schemeColor(st.scheme));
+                L.y += 42 + 20;
+            }
+            L.body("Every level multiplies the face", theme::textDim);
+            L.body("count by four. Five levels is", theme::textDim);
+            L.body("1024x the cage — which is why", theme::textDim);
+            L.body("~5 steps already look smooth.", theme::warn);
+        }
 
         if (st.mode == Mode::Compare) {
             L.sectionLabel("WHAT TO LOOK FOR");
@@ -226,12 +252,12 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             L.stat("V \u2212 E + F", std::to_string(s.euler),
                    s.euler == st.cageStats_.euler ? theme::accent : theme::warn);
             L.stat("extraordinary", std::to_string(s.extraordinary),
-                   s.extraordinary ? theme::warn : theme::textDim);
+                   s.extraordinary ? theme::hot : theme::textDim);
             L.stat("longest edge", fmt("%.2f px", fi.maxEdgePx),
                    fi.maxEdgePx < 2.0 ? theme::accent : theme::textDim);
             L.gap(6);
 
-            if (st.surf_.faceHistory.size() > 1) {
+            if (!compact && st.surf_.faceHistory.size() > 1) {
                 L.sectionLabel("FACES PER LEVEL  (log)");
                 drawGrowthChart(cv, L.x, L.y, L.w, 42, st.surf_.faceHistory,
                                 schemeColor(st.scheme));
@@ -244,12 +270,14 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             }
 
             L.gap(2);
+            if (!compact) {
             L.sectionLabel("REFINEMENT RULE");
             for (const std::string& line : schemeRule(st.scheme)) {
                 drawTextTop(cv, Face::Mono, L.x, L.y, line, theme::textDim);
                 L.y += textLineHeight(Face::Mono) + 1;
             }
             L.gap(8);
+            }
             if (st.surf_.triangulatedFirst)
                 L.body("cage triangulated first (scheme needs triangles)", theme::warn);
             if (st.surf_.cappedByBudget)
@@ -290,6 +318,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
         L.stat("total length", fmt("%.3f", st.curve_.totalLength), theme::textDim);
         L.gap(6);
 
+        if (!compact) {
         L.sectionLabel("REFINEMENT RULE");
         {
             std::vector<std::string> rule;
@@ -305,6 +334,7 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             }
         }
         L.gap(8);
+        }
 
         if (st.curveScheme == CurveScheme::FourPoint && st.curveParam > 0.125)
             L.body("w far from 1/16 → fractal, not smooth", theme::warn);
@@ -341,11 +371,12 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
         L.stat("build time", fmt("%.1f ms", st.terr_.milliseconds), theme::textDim);
         L.gap(10);
 
-        if (st.terr_.vertHistory.size() > 1) {
+        if (!compact && st.terr_.vertHistory.size() > 1) {
             L.sectionLabel("VERTICES PER LEVEL  (log)");
             drawGrowthChart(cv, L.x, L.y, L.w, 42, st.terr_.vertHistory, theme::accent);
             L.y += 42 + 20;
         }
+        if (!compact) {
         L.sectionLabel("REFINEMENT RULE");
         {
             const char* rule[] = {"diamond: square centre =",
@@ -358,18 +389,26 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
             }
         }
         L.gap(8);
+        }
         L.body("displacement range shrinks each level", theme::textFaint);
     }
 
-    // ---- view section, pinned near the bottom
-    int viewY = PY + PH - 150;
-    if (L.y < viewY) L.y = viewY;
-    L.sectionLabel("VIEW");
-    L.chipRow(fmt("shading: %s", shadingName(st.shading)), theme::accent2, true);
-    L.chipRow("wireframe", theme::accent, st.showWire);
-    L.chipRow(st.mode == Mode::Curve ? "control polygon" : "control cage", theme::cage, st.showCage);
-    if (st.mode == Mode::Surface)
-        L.chipRow("extraordinary vertices", theme::warn, st.showExtraordinary);
+    // ---- view section, pinned near the bottom when there is room for it
+    const bool curveMode = st.mode == Mode::Curve;
+    const int viewRows = curveMode ? 1 : (st.mode == Mode::Surface ? 4 : 3);
+    const int viewBlock = 24 + viewRows * (textLineHeight(Face::UI) + 1);
+    const int viewY = PY + PH - 34 - viewBlock;
+    if (!veryCompact && L.y <= viewY) {
+        L.y = viewY;
+        L.sectionLabel("VIEW");
+        if (!curveMode) {
+            L.chipRow(fmt("shading: %s", shadingName(st.shading)), theme::accent2, true);
+            L.chipRow("wireframe", theme::accent, st.showWire);
+        }
+        L.chipRow(curveMode ? "control polygon" : "control cage", theme::cage, st.showCage);
+        if (st.mode == Mode::Surface)
+            L.chipRow("extraordinary vertices", theme::hot, st.showExtraordinary);
+    }
 
     // ---- footer
     {
@@ -380,24 +419,33 @@ void drawHud(Canvas& cv, const AppState& st, const FrameInfo& fi) {
 
     // ---- key hints along the bottom of the viewport
     {
-        const char* hints = "1-4 mode · S scheme · M cage · [ ] level · F shading · "
-                            "W wire · C cage · X extraordinary · A spin · P png · Q quit";
-        int tw = textWidth(Face::UI, hints);
+        const char* full = "1-5 mode · S scheme · M cage · [ ] level · F shading · "
+                           "W wire · C cage · X extraordinary · A spin · P png · Q quit";
+        const char* brief = "1-5 mode · S scheme · [ ] level · A spin · Q quit";
         int bx = PX + PW + 24, by = cv.h - 34;
-        cv.roundRect(bx, by, std::min(tw + 24, cv.w - bx - 22), 24, 12, theme::panel, 0.8);
-        drawTextTop(cv, Face::UI, bx + 12, by + 4, hints, theme::textFaint);
+        int avail = cv.w - bx - 22;
+        const char* hints = (textWidth(Face::UI, full) + 24 <= avail) ? full : brief;
+        int tw = textWidth(Face::UI, hints);
+        if (tw + 24 <= avail) {
+            cv.roundRect(bx, by, tw + 24, 24, 12, theme::panel, 0.8);
+            drawTextTop(cv, Face::UI, bx + 12, by + 4, hints, theme::textFaint);
+        }
     }
 
-    // ---- tile captions for compare mode
-    if (st.mode == Mode::Compare) {
+    // ---- tile captions
+    if (st.isTiled()) {
         const int gutter = 348, pad = 6, hintStrip = 40;
         const int vw = (cv.w - gutter - pad * 3) / 2, vh = (cv.h - pad * 3 - hintStrip) / 2;
         for (int i = 0; i < 4; i++) {
-            SurfScheme s = AppState::kCompareSchemes[i];
+            bool cmpMode = st.mode == Mode::Compare;
+            SurfScheme s = cmpMode ? AppState::kCompareSchemes[i] : st.scheme;
             int vx = gutter + pad + (i % 2) * (vw + pad);
             int vy = pad + (i / 2) * (vh + pad);
             cv.roundRectOutline(vx, vy, vw, vh, 8, theme::panelEdge, 0.5);
-            std::string label = fmt("%s · %s", schemeName(s), schemeKind(s));
+            std::string label =
+                cmpMode ? fmt("%s · %s", schemeName(s), schemeKind(s))
+                        : fmt("level %d · %s faces", i,
+                              withThousands(st.lvlStats_[i].faces).c_str());
             int tw = textWidth(Face::UIBold, label);
             cv.roundRect(vx + 12, vy + 12, tw + 42, 26, 13, theme::panel, 0.88);
             cv.roundRect(vx + 24, vy + 21, 8, 8, 2, schemeColor(s), 1.0);

@@ -17,7 +17,7 @@
 
 namespace sl {
 
-enum class Mode { Surface, Curve, Terrain, Compare, Count };
+enum class Mode { Surface, Curve, Terrain, Compare, Levels, Count };
 const char* modeName(Mode m);
 bool parseMode(const std::string& s, Mode& out);
 
@@ -34,6 +34,7 @@ const Vec3 accent     = rgb(0x4DD0A6);
 const Vec3 accent2    = rgb(0x6AA9FF);
 const Vec3 warn       = rgb(0xFFB454);
 const Vec3 violet     = rgb(0xB98CFF);
+const Vec3 hot        = rgb(0xFF4D7D);   // extraordinary-vertex markers
 const Vec3 cage       = rgb(0xFFB454);
 const Vec3 cagePoint  = rgb(0xFFD79A);
 const Vec3 wire       = rgb(0x1A2230);
@@ -83,9 +84,14 @@ struct AppState {
     bool curveClosed_ = true;
     CurveResult curve_;
     TerrainResult terr_;
-    SubdivResult cmp_[4];
+    SubdivResult cmp_[4];          // compare mode: one scheme per tile
     MeshStats cmpStats_[4];
+    SubdivResult lvl_[4];          // levels mode: levels 0..3 of one scheme
+    MeshStats lvlStats_[4];
     static const SurfScheme kCompareSchemes[4];
+
+    // True for the modes drawn as a 2x2 grid of viewports.
+    bool isTiled() const { return mode == Mode::Compare || mode == Mode::Levels; }
 
     void recompute();
     int maxLevel() const;

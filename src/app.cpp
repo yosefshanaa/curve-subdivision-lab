@@ -17,6 +17,7 @@ const char* modeName(Mode m) {
         case Mode::Curve:   return "Curve subdivision";
         case Mode::Terrain: return "Terrain (diamond-square)";
         case Mode::Compare: return "Four schemes compared";
+        case Mode::Levels:  return "Level progression";
         default:            return "?";
     }
 }
@@ -28,6 +29,7 @@ bool parseMode(const std::string& s, Mode& out) {
     if (n == "curve")   { out = Mode::Curve;   return true; }
     if (n == "terrain") { out = Mode::Terrain; return true; }
     if (n == "compare") { out = Mode::Compare; return true; }
+    if (n == "levels")  { out = Mode::Levels;  return true; }
     return false;
 }
 
@@ -70,6 +72,7 @@ int AppState::maxLevel() const {
         case Mode::Curve:   return 8;
         case Mode::Terrain: return 8;
         case Mode::Compare: return 4;
+        case Mode::Levels:  return 3;
         default:            return 5;
     }
 }
@@ -127,6 +130,17 @@ void AppState::recompute() {
             }
             break;
         }
+        case Mode::Levels: {
+            cage_ = makeBaseMesh(base);
+            Topology ct = buildTopology(cage_);
+            cageStats_ = computeStats(cage_, ct);
+            for (int i = 0; i < 4; i++) {
+                lvl_[i] = subdivide(cage_, scheme, i, 120000);
+                Topology t = buildTopology(lvl_[i].mesh);
+                lvlStats_[i] = computeStats(lvl_[i].mesh, t);
+            }
+            break;
+        }
         default: break;
     }
 }
@@ -169,8 +183,12 @@ void drawSurfaceScene(Renderer& r, const AppState& st, const Mesh& shown, const 
 
     r.drawMesh(shown, surfaceMaterial(scheme), o);
 
-    if (overlays && st.showWire && shown.numFaces() < 30000)
-        r.drawWireframe(shown, theme::wire, wireThickness, 1.2e-3, 0.5);
+    if (overlays && st.showWire && shown.numFaces() < 30000) {
+        // Fade the wireframe as the mesh gets denser, or it stops reading as a
+        // grid and just darkens the surface.
+        double a = clampd(0.55 * 800.0 / std::max(1, shown.numFaces()), 0.10, 0.55);
+        r.drawWireframe(shown, theme::wire, wireThickness, 1.2e-3, a);
+    }
 
     if (overlays && st.showCage) {
         r.drawWireframe(cage, theme::cage, 1.5, 1.2e-2, 0.85);
@@ -200,8 +218,9 @@ FrameInfo renderFrame(const AppState& st, Canvas& out, int w, int h, int ss) {
     // The HUD panel lives on the left, so the 3D viewport starts after it.
     const int gutter = st.showHud ? 348 : 0;
 
-    if (st.mode == Mode::Compare) {
-        // 2x2 tiles, one scheme each, all sharing the camera and the cage.
+    if (st.isTiled()) {
+        // 2x2 tiles sharing one camera: either four schemes at the same level,
+        // or one scheme at four successive levels.
         const int pad = 6;
         const int hintStrip = st.showHud ? 40 : 0;   // leave room for the key hints
         const int vx = gutter + pad, vy = pad;
@@ -210,12 +229,15 @@ FrameInfo renderFrame(const AppState& st, Canvas& out, int w, int h, int ss) {
             Viewport vp{vx + (i % 2) * (vw + pad), vy + (i / 2) * (vh + pad), vw, vh};
             Renderer r(rt, st.cam, vp);
             if (st.showGrid) r.drawGroundGrid(2.6, 10, -1.35, theme::grid, 0.35);
-            drawSurfaceScene(r, st, st.cmp_[i].mesh, st.cage_, AppState::kCompareSchemes[i],
-                             true, 0.75);
+            const bool cmpMode = st.mode == Mode::Compare;
+            const Mesh& shown = cmpMode ? st.cmp_[i].mesh : st.lvl_[i].mesh;
+            SurfScheme sc = cmpMode ? AppState::kCompareSchemes[i] : st.scheme;
+            drawSurfaceScene(r, st, shown, st.cage_, sc, true, 0.75);
             fi.triangles += r.trianglesDrawn();
         }
-        fi.verts = st.cmp_[0].mesh.numVerts();
-        fi.faces = st.cmp_[0].mesh.numFaces();
+        const SubdivResult* last = (st.mode == Mode::Compare) ? &st.cmp_[3] : &st.lvl_[3];
+        fi.verts = last->mesh.numVerts();
+        fi.faces = last->mesh.numFaces();
     } else {
         Viewport vp{gutter, 0, w - gutter, h};
         Renderer r(rt, st.cam, vp);
@@ -225,7 +247,7 @@ FrameInfo renderFrame(const AppState& st, Canvas& out, int w, int h, int ss) {
             drawSurfaceScene(r, st, st.surf_.mesh, st.cage_, st.scheme, true, 0.9);
             if (st.showExtraordinary)
                 for (int v : st.extraordinaryVerts_)
-                    r.drawPoint3D(st.surf_.mesh.V[v], theme::warn, 4.2, 6e-3, 1.0);
+                    r.drawPoint3D(st.surf_.mesh.V[v], theme::hot, 5.2, 8e-3, 1.0);
             fi.maxEdgePx = maxEdgePixels(r, st.surf_.mesh);
             fi.verts = st.surf_.mesh.numVerts();
             fi.faces = st.surf_.mesh.numFaces();
@@ -288,6 +310,7 @@ bool handleKey(AppState& st, int ch, bool& quit) {
         case '2': st.mode = Mode::Curve;   st.resetCamera(); st.recompute(); return true;
         case '3': st.mode = Mode::Terrain; st.resetCamera(); st.recompute(); return true;
         case '4': st.mode = Mode::Compare; st.resetCamera(); st.recompute(); return true;
+        case '5': st.mode = Mode::Levels;  st.resetCamera(); st.recompute(); return true;
 
         case 's':
             if (st.mode == Mode::Curve) {
