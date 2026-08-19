@@ -1,151 +1,196 @@
-# PRD — Interactive Curve Subdivision Lab
+# PRD — Subdivision Lab 3D
 
 ## 1. Overview
 
-**Product:** A single-page interactive web app that demonstrates subdivision of curves, as taught in the course's Subdivision lecture (part of the "Hidden Surface Removal + Subdivision" lecture).
+**Product:** A C++ desktop application that demonstrates **surface subdivision**
+in 3D, rendered by a software rasteriser written for this project.
 
-**Form factor:** One self-contained HTML file (HTML5 Canvas + vanilla JavaScript, zero external dependencies). Open the file in any modern desktop browser and it works — no build step, no server, no install.
+**Form factor:** A single native binary. `make` is the whole build; the only
+requirement is a C++17 compiler. There is no OpenGL, no windowing toolkit, no
+image library and no font library to install — the window is obtained by
+`dlopen`ing Xlib at runtime, and the program also runs with no display at all.
 
-**Course context:** This is the mini-project (20% of grade). The lecturer described mini-projects as roughly a one-day extra exercise, so the scope is intentionally small and demo-focused. The lecture itself lists "Subdivision Experiments — change the recipe weights, observe when results become smooth, rough, or fractal-like" as a suggested mini-project direction; this app is exactly that, made interactive.
+**History:** v1 of this project was a single-file HTML/Canvas demo of *curve*
+subdivision in 2D. This document specifies the rewrite: same subject, but in
+C++, in three dimensions, and centred on surfaces. The curve schemes survive as
+one mode of the new app because they are the one-dimensional ancestors of the
+surface rules.
 
-## 2. Goal
+## 2. Goals
 
-Make the core concepts of curve subdivision *visible and manipulable*:
+1. Make the **control cage → limit surface** relationship visible and
+   manipulable in 3D.
+2. Show the difference between **approximating** and **interpolating** surface
+   schemes as directly as the 2D version showed it for curves.
+3. Make the **cost** of subdivision concrete: the face count multiplies by four
+   per level, which is why "about five levels" is effectively the limit surface.
+4. Show the parts of the theory that only exist for surfaces: **extraordinary
+   vertices**, **boundary rules**, **primal vs dual refinement**, and the
+   **Euler characteristic** as an invariant that a correct implementation must
+   preserve.
+5. Implement the **rendering pipeline itself**, not a wrapper around one, so the
+   project demonstrates the transformation/clipping/rasterisation material as
+   well as the subdivision material.
 
-1. A rough **control polygon** refined step-by-step toward a smooth **limit curve**.
-2. The difference between an **approximating** scheme (Chaikin corner cutting) and an **interpolating** scheme (Four-Point).
-3. How the **scheme weights** control smoothness — including the lecture's warning that wrong weights produce fractal-like, nowhere-smooth curves.
-4. Why **~5 iterations** are "infinity" in practice (edges shrink below one pixel; vertex count grows exponentially).
+## 3. Target users
 
-## 3. Target Users
+- **The lecturer**, during a demo or while grading: must reach every concept
+  within about two minutes of keyboard use, and must be able to build the
+  project without installing anything.
+- **The student (author)**, presenting live: controls that are easy to drive and
+  hard to break.
+- Anyone reading the repository: the README must convey the result without
+  running anything, using images the program itself produced.
 
-- **The lecturer**, during a demo/grading session: needs to see the concepts within ~2 minutes of interaction, without instructions.
-- **The student (author)**, while presenting: needs controls that are easy to drive live and hard to break.
-- Secondary: other students exploring the demo from a shared link/file.
+## 4. Success criteria
 
-## 4. Success Criteria
+- **S1** — `make && make run` works on a stock Linux install with only a
+  compiler present. No `-dev` packages, no vendored third-party source.
+- **S2** — A first-time viewer sees a cage refine into a smooth surface within
+  10 seconds of the window opening.
+- **S3** — The interpolating/approximating distinction is visually obvious in a
+  single frame (the Compare view).
+- **S4** — The exponential growth of subdivision is on screen as a number *and*
+  as a picture.
+- **S5** — Correctness is demonstrated, not asserted: a self test verifies the
+  schemes against known counts and invariants and prints PASS/FAIL.
+- **S6** — Every screenshot in the documentation is reproducible with one
+  command, from the application, with the recipe recorded in the source.
+- **S7** — The app never freezes: subdivision is capped by a face budget.
+- **S8** — It runs headless, so it can render documentation on a machine with no
+  display.
 
-- S1: A first-time viewer can draw a polygon and see a smooth curve in under 30 seconds.
-- S2: With overlay enabled, the approximating-vs-interpolating difference is visually obvious in one glance (Four-Point curve passes through control points; Chaikin curve pulls away from them).
-- S3: Pressing the fractal preset visibly transforms the smooth Four-Point curve into a jagged, self-similar one.
-- S4: The stats panel makes the exponential vertex growth explicit (e.g., 8 → 512 vertices at 6 iterations).
-- S4b: The stats panel demonstrates the lecture's "~5 iterations is effectively infinity" rule directly: it shows the longest curve-edge length in pixels (visibly halving each iteration), and labels the curve "≈ limit curve" once edges drop below 1 px. Note: how many iterations that takes depends on the initial edge length — a densely clicked polygon (edges ~50 px) reaches sub-pixel at 5–6 iterations; the sparse 9-point preset (edges ~300 px) does not by 6, which is itself a truthful demonstration of the rule's assumption.
-- S5: The app never freezes or crashes during a live demo (iteration cap + vertex cap enforced).
-- S6: Everything runs from a double-clicked local file with no network access.
-
-## 5. Functional Requirements
-
-Numbered and testable. FR-1 … FR-16 are the deliverable; FR-17 … FR-19 are optional polish.
-
-### Control polygon editing
-
-- **FR-1:** Left-click on empty canvas adds a control point at the cursor, appended to the polygon.
-- **FR-2:** Dragging an existing control point moves it; the subdivided curve updates live during the drag.
-- **FR-3:** Right-click (or delete mode / double-click fallback) removes the control point under the cursor.
-- **FR-4:** A toggle switches between **open** polyline and **closed** polygon. The curve updates immediately and endpoint behavior changes accordingly.
-- **FR-5:** A "Clear" button removes all points; a "Preset shape" button loads a sensible demo polygon. **The preset loads automatically on startup**, so the app never opens to a blank screen.
+## 5. Functional requirements
 
 ### Subdivision schemes
 
-- **FR-6:** The user can select the active scheme. The UI labels use the lecture's vocabulary: **"Chaikin — corner cutting (approximating)"** and **"Four-Point (interpolating)"**, so the classification is on screen at all times.
-- **FR-7:** Chaikin implements corner cutting: each edge is replaced by two new points at parameter `t` and `1−t` along the edge. Default `t = 0.25` (the classic 1:3 cut mentioned in the lecture). A slider adjusts `t` in [0.05, 0.45], with the default marked and a one-click reset to it.
-- **FR-8:** Four-Point inserts, for each edge (P_i, P_{i+1}), a new point
-  `Q = (1/2 + w)(P_i + P_{i+1}) − w(P_{i−1} + P_{i+2})`
-  keeping all old points (interpolating). Default `w = 1/16`. A slider adjusts `w` in [0, 0.25], with the default marked and a one-click reset to it.
-- **FR-9:** An iterations slider selects 0–6 subdivision iterations. 0 shows only the control polygon.
-- **FR-10:** Open polylines are handled correctly at endpoints for both schemes (strategy specified in PLAN.md): endpoints of the curve stay anchored to the first/last control points, and no scheme reads out-of-range indices.
+- **FR-1** — Implement **Catmull–Clark** for arbitrary polygon meshes: face
+  points, edge points, and the vertex rule `(Q + 2R + (n−3)S) / n`.
+- **FR-2** — Implement **Loop** for triangle meshes, with Warren's β. Non-triangle
+  cages are triangulated first and the UI says so.
+- **FR-3** — Implement **Doo–Sabin**, including the F/E/V face construction, so
+  the dual character of the scheme is visible.
+- **FR-4** — Implement **modified Butterfly** (Zorin): interpolating, with the
+  regular 8-point stencil, the extraordinary-vertex stencil for valence 3, 4 and
+  ≥ 5, and averaging when both endpoints are extraordinary.
+- **FR-5** — Boundary rules for every scheme that can meet a boundary:
+  Catmull–Clark pins corners and uses the (1, 6, 1)/8 cubic B-spline rule along
+  the border; Loop uses (1, 6, 1)/8; Doo–Sabin closes against Chaikin points;
+  Butterfly falls back to the Four-Point curve rule.
+- **FR-6** — A level control, 0 to 5, with a face budget that stops refinement
+  before the machine does.
+- **FR-7** — At least eight control cages, including closed solids, a torus (χ = 0),
+  an open patch and an open cylinder (two boundary loops), and non-convex
+  polycubes.
 
-### Visualization
+### The 1D case and procedural generation
 
-- **FR-11:** The subdivided curve is drawn prominently; the original control polygon and its control points are drawn faintly on top (toggleable overlay, on by default). This makes S2 achievable.
-- **FR-12:** A "Show fractal behavior" preset button switches to Four-Point, sets `w` to a value well above 1/16 (e.g., 0.18), and sets iterations high (e.g., 6), so the fractal effect appears with one click. A caption ("w far from 1/16 breaks smoothness — the limit curve becomes fractal") is **state-driven**: it is visible whenever the active scheme is Four-Point and `w > 1/8`, and disappears when `w` returns to the smooth range — regardless of whether the preset button or the slider got it there.
-- **FR-13:** A live stats panel shows: active scheme, iteration count, current weight value, number of control points, number of curve vertices after subdivision, and the **longest curve-edge length in pixels**. When that length drops below 1 px, the panel shows an "≈ limit curve (edges < 1 px)" badge — this is the app's concrete demonstration of the lecture's "~5 iterations reach sub-pixel edges" rule.
+- **FR-8** — Curve mode: Chaikin, Four-Point and random midpoint displacement,
+  operating on 3D control polygons, with the "wrong weights go fractal"
+  behaviour reachable from the parameter control.
+- **FR-9** — Terrain mode: diamond–square, seeded, with a roughness control and
+  an elevation colour ramp — midpoint displacement one dimension up.
 
-### Robustness
+### Rendering
 
-- **FR-14:** With too few points to subdivide (both schemes: fewer than 2 points when open, fewer than 3 when closed), the app degrades gracefully: it draws whatever points/segments exist and shows a hint ("add more points") instead of erroring.
-- **FR-15:** A hard cap on total curve vertices (e.g., 20,000) silently limits effective iterations for very large control polygons — the lecture warns that over-subdividing freezes machines.
-- **FR-16:** The canvas resizes with the window without losing state.
+- **FR-10** — A software 3D pipeline: model/view/projection matrices,
+  near-plane clipping, perspective divide, viewport transform, backface culling,
+  z-buffer, and perspective-correct attribute interpolation.
+- **FR-11** — Three shading models — flat, Gouraud and Phong — switchable at
+  runtime on the same mesh.
+- **FR-12** — Overlays that respect the depth buffer: the refined wireframe, the
+  control cage, control points, face normals, and extraordinary-vertex markers.
+- **FR-13** — Anti-aliasing by supersampling, resolved before the HUD is drawn
+  so text stays sharp.
+- **FR-14** — Multiple viewports in one frame, for the four-scheme comparison
+  and the level progression.
 
-### Optional polish (Milestone 3 — allowed, not required)
+### Readout
 
-- **FR-17:** Animated transition when the iteration count changes (brief interpolation between levels or a stepped auto-play "grow" button).
-- **FR-18:** Export the current canvas as a PNG (`canvas.toDataURL`, one button).
-- **FR-19:** Side-by-side mode: both schemes rendered simultaneously on the same control polygon in two colors, with a legend.
+- **FR-15** — A live panel showing the active scheme and its classification, the
+  cage, the level, V / E / F, **V − E + F**, the extraordinary-vertex count, the
+  longest mesh edge in pixels, the refinement time, and a log-scaled chart of
+  faces per level.
+- **FR-16** — The active scheme's stencil written out, so the picture and the
+  formula are on screen together.
+- **FR-17** — The HUD degrades gracefully on small windows rather than
+  overflowing.
 
-## 6. Non-Goals / Out of Scope
+### Interaction and tooling
 
-Explicitly excluded to keep the project at the "1–2 days" complexity the lecturer expects:
+- **FR-18** — Orbit/zoom by mouse or keyboard; every mode, scheme, cage and
+  overlay reachable by a single keypress.
+- **FR-19** — `--shot` renders one frame offscreen to a PNG using the same code
+  path as the window.
+- **FR-20** — `--gallery` renders the complete documentation screenshot set.
+- **FR-21** — `--selftest` verifies the schemes numerically and exits non-zero
+  on failure.
+- **FR-22** — PNG output without linking an image library.
 
-- **No surface subdivision** (Catmull-Clark, Loop, Doo-Sabin, Butterfly). Curves only. Surfaces can be mentioned verbally in the demo as "the 3D generalization."
-- **No 3D rendering**, no WebGL/WebGPU, no camera.
-- **No backend**, no persistence, no accounts, no URL state sharing.
-- **No mobile/touch support.** Desktop mouse interaction only.
-- **No external libraries or fonts.** One file, zero dependencies.
-- **No mathematical analysis features** (curvature plots, convergence proofs, limit-curve error metrics).
-- **No undo/redo.** Clear + preset button is enough for a demo.
-- **No cross-browser QA matrix.** Works in current Chrome/Firefox; anything else is best-effort.
+## 6. Non-goals
 
-## 7. UI Layout
+- **No GPU rendering.** Implementing the pipeline is the point.
+- **No mesh editing.** Cages are chosen from a built-in set; there is no vertex
+  dragging in 3D and no file import.
+- **No creases, no adaptive subdivision, no limit-position evaluation.** These
+  are real parts of the literature but well beyond a mini-project.
+- **No texture mapping, no shadows, no global illumination.**
+- **No cross-platform window backends.** The renderer is portable C++; only the
+  window is X11-specific, and its absence degrades to headless rendering rather
+  than a build failure.
+- **No third-party code**, vendored or linked, beyond the C++ standard library.
 
-Single screen, no navigation:
+## 7. Layout
 
 ```
-+---------------------------------------------------------------+
-|  Curve Subdivision Lab                                        |
-+-----------------------------------------+---------------------+
-|                                         | CONTROLS (sidebar)  |
-|                                         |                     |
-|                                         | Scheme:  (o) Chaikin|
-|                                         |          ( ) 4-Point|
-|                CANVAS                   |                     |
-|                                         | Iterations  [0──6]  |
-|   • control points (faint, draggable)   | Weight/Ratio [────] |
-|   ─ control polygon (faint)             |                     |
-|   ━ subdivided curve (bold)             | [x] Closed polygon  |
-|                                         | [x] Show overlay    |
-|                                         |                     |
-|                                         | [Show fractal]      |
-|                                         | [Preset shape]      |
-|                                         | [Clear]             |
-|                                         +---------------------+
-|                                         | STATS               |
-|                                         | Scheme: Chaikin     |
-|                                         |  (approximating)    |
-|                                         | Iterations: 4       |
-|                                         | Control pts: 8      |
-|                                         | Curve verts: 128    |
-|                                         | Max edge: 3.2 px    |
-+-----------------------------------------+---------------------+
-|  hint bar: "click: add · drag: move · right-click: delete"    |
-+---------------------------------------------------------------+
++------------------+--------------------------------------------------+
+| Subdivision Lab  |                                                  |
+| mode tabs        |                                                  |
+|                  |                                                  |
+| SCHEME           |                  3D VIEWPORT                     |
+|  Catmull-Clark   |                                                  |
+|  approximating   |     - shaded limit surface                       |
+|                  |     - refined wireframe                          |
+| CONTROL CAGE     |     - control cage + control points (orange)     |
+| LEVEL  ####--    |     - extraordinary vertices (pink)              |
+|                  |                                                  |
+| REFINED MESH     |                                                  |
+|  V / E / F       |                                                  |
+|  V - E + F       |                                                  |
+|  extraordinary   |                                                  |
+|  longest edge px |                                                  |
+|                  |                                                  |
+| FACES PER LEVEL  |                                                  |
+|  [log bar chart] |                                                  |
+|                  |                                                  |
+| REFINEMENT RULE  |                                                  |
+| VIEW toggles     |                                                  |
++------------------+--------------------------------------------------+
+|                  | key hints                                        |
++------------------+--------------------------------------------------+
 ```
 
-- Canvas takes all remaining width; sidebar is fixed-width (~260 px).
-- The weight slider is contextual: it shows the cut ratio `t` when Chaikin is active and the weight `w` when Four-Point is active, each with its default marked.
-- Colors: dark canvas background, bright curve, dimmed gray control polygon — chosen for projector visibility.
+In Compare and Levels modes the viewport is split into a 2×2 grid of
+independent views sharing one camera.
 
 ## 8. Assumptions
 
-- A1: The app will be demoed on a desktop browser from a local file; no hosting is required.
-- A2: The "Subdivision" lecture content as captured in the course notes (control polygon / control points / limit curve, Chaikin ≈ 1:3 corner cutting, interpolating Four-Point, fractal behavior from wrong weights, ~5 iterations rule) is the authoritative scope; concepts not in the lecture are out of scope.
-- A3: Six iterations is a sufficient upper bound: it exceeds the lecture's "~5 is effectively infinity" rule and demonstrates the point without risking performance (with the FR-15 cap).
-- A4: A single default preset polygon (an irregular star-ish shape with both sharp and shallow corners) is enough to demonstrate all behaviors.
-- A5: English UI text.
+- **A1** — Desktop Linux; WSLg counts. The binary is portable C++ apart from the
+  X11 window.
+- **A2** — Five levels is a sufficient maximum: a cube reaches 6 144 faces, and
+  the surface is visually converged well before that.
+- **A3** — The lecture's subdivision material (control polygon/cage, limit
+  curve/surface, approximating vs interpolating, weights and fractal behaviour,
+  "≈5 iterations is infinity") is the scope. Surface subdivision extends it in
+  the direction the lecture itself named as the 3D generalisation.
+- **A4** — English UI text, no localisation.
 
-## 9. v2 Additions (post-review)
+## 9. Course submission requirements
 
-Added after the v1 deliverable was complete, at the author's request, to deepen the lecture coverage. Both map directly to lecture material:
-
-- **FR-20 — Magnifier lens:** a View toggle shows a cursor-following circular lens that re-renders the active curve at 6× **subdivided 4 levels deeper** (separate 80,000-vertex cap). This demonstrates two lecture claims at once: a correct scheme's limit curve is smooth (it flattens under magnification), while the wrong-weight Four-Point curve is fractal ("jagged at every zoom level"); and the "~5 iterations suffice" rule is resolution-dependent (under magnification you need more iterations).
-- **FR-21 — Random midpoint displacement scheme:** a third scheme from the procedural-generation lecture. Keeps old points and inserts each edge's midpoint displaced along the edge normal by a random amount within ± r·|edge|/2 — the displacement range halves each level exactly as the lecture's terrain recipe describes. Roughness slider (0–0.8, default 0.25), seeded RNG so the terrain is stable across redraws, and a "re-roll" button for a new seed. Compare mode is disabled for this scheme (it pairs the two deterministic schemes); the stencil shows the midpoint ± range rule live.
-
-## 10. Course Submission Requirements
-
-The app itself is not the whole deliverable. Per the course's stated workflow (emphasized repeatedly in the lecture notes):
-
-- **D1 — Git history:** the project lives in a git repository with incremental commits (at least one per meaningful task/milestone). The lecturer explicitly treats a single final "everything" commit as suspicious.
-- **D2 — Report:** a short `REPORT.md` with real content, not filler: what was built, screenshots of each key behavior (both schemes, overlay comparison, fractal mode, stats at high iterations), which lecture concepts each feature demonstrates, and problems encountered. The lecturer grades primarily from the report.
-- **D3 — Demo context (if shared on Discord):** follow the lecturer's stated format — what the demo is, why it is useful, and what concept it demonstrates.
-
-These are tracked as first-class tasks in TODO.md, not afterthoughts.
+- **D1 — Git history:** incremental commits, one per meaningful milestone. A
+  single final "everything" commit is treated as suspicious.
+- **D2 — Report:** `REPORT.md` with real content — what was built, screenshots
+  of each behaviour, the mapping from features to lecture concepts, and the
+  problems actually encountered and how they were diagnosed.
+- **D3 — Reproducibility:** every figure in the documentation regenerable with
+  one command, and every correctness claim backed by the self test.

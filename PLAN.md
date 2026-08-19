@@ -1,180 +1,279 @@
-# PLAN — Interactive Curve Subdivision Lab
+# PLAN — Subdivision Lab 3D
 
-Technical plan for the app specified in PRD.md. Single developer, single file, no dependencies.
+Technical plan for the application specified in [PRD.md](PRD.md). Single
+developer, no dependencies beyond the C++ standard library.
 
 ## 1. Architecture
 
-One file: `index.html`. Inside it, one `<style>` block, one `<canvas>`, a sidebar `<div>`, and one `<script>` organized into five plain-object modules (no classes needed at this size, no bundler):
-
 ```
-index.html
-└── <script>
-    ├── state      — the single source of truth (app state object)
-    ├── schemes    — pure geometry: chaikin(), fourPoint(), subdivide()
-    ├── render     — draws state onto the canvas (the only code that touches ctx)
-    ├── input      — mouse handlers on the canvas (add/drag/delete points)
-    └── ui         — binds sliders/buttons/toggles to state, updates stats panel
+main.cpp        CLI, interactive loop, gallery, self test
+   |
+app.{h,cpp}     AppState -> recompute() -> renderFrame()
+   |            (one state object; both the window and --shot go through here)
+   +-- hud.cpp             the readout panel, drawn on the resolved canvas
+   +-- render.{h,cpp}      Camera, RenderTarget, Renderer (the 3D pipeline)
+   |      +-- canvas.{h,cpp}  Canvas, 2D primitives, text
+   |             +-- font_data.h   generated glyph atlases
+   +-- subdiv_surface.*    Catmull-Clark / Loop / Doo-Sabin / Butterfly
+   +-- subdiv_curve.*      Chaikin / Four-Point / midpoint displacement
+   +-- terrain.*           diamond-square
+   |      +-- mesh.{h,cpp}    Mesh, Topology, MeshStats, base cages
+   |             +-- vecmath.h
+   +-- png.{h,cpp}         PNG + DEFLATE writer
+   +-- x11window.*         dlopen'd Xlib window (optional at runtime)
 ```
 
-**Data flow (unidirectional):** input/ui mutate `state` → call `update()` → `update()` recomputes the subdivided curve (schemes) and calls `render()` + refreshes stats. There is no other path to the screen. This keeps the app trivially debuggable: any visual bug is either in `subdivide()` output (log the array) or in `render()`.
+**Data flow is one-directional.** Input mutates `AppState`, `recompute()`
+rebuilds the derived meshes, `renderFrame()` draws. Nothing else touches the
+framebuffer. Any visual bug is therefore either in a `*Step()` function (dump
+the mesh and check `V − E + F`) or in `render.cpp`.
 
-No animation loop by default — the canvas redraws only on change (event-driven). A `requestAnimationFrame` loop is introduced only if Milestone 3's animated transitions are built.
+**Every subdivision scheme is a pure function `Mesh -> Mesh`.** They share no
+state, cache nothing, and are individually testable. Refinement is cheap enough
+(tens of milliseconds at level 5) that the app recomputes from the cage on every
+change instead of maintaining an incremental structure.
 
-## 2. Data Model
+## 2. Data model
 
-```js
-const state = {
-  // geometry
-  points: [ {x, y}, ... ],   // control points, in insertion order
-  closed: true,              // closed polygon vs open polyline
-
-  // scheme settings
-  scheme: 'chaikin',         // 'chaikin' | 'fourpoint'
-  iterations: 4,             // 0..6
-  chaikinT: 0.25,            // cut parameter t, in [0.05, 0.45]
-  fourPointW: 1/16,          // weight w, in [0, 0.25]
-
-  // view options
-  showOverlay: true,
-
-  // interaction (transient)
-  dragIndex: -1,             // index of point being dragged, -1 = none
-
-  // derived (recomputed by update(), never edited directly)
-  curve: [ {x, y}, ... ],    // result of subdivision
-  effectiveIterations: 4,    // may be < iterations due to vertex cap
-  maxEdgeLen: 3.2,           // longest curve edge in CSS px (drives the "≈ limit curve" badge, FR-13)
+```cpp
+struct Mesh {
+    std::vector<Vec3> V;                  // vertex positions
+    std::vector<std::vector<int>> F;      // faces: CCW loops of vertex indices
+    std::vector<Vec3> vertexColor;        // optional (terrain elevation ramp)
+    std::vector<Vec3> faceNormal, vertexNormal;   // derived
 };
 ```
 
-Derived data (`curve`, `effectiveIterations`) is recomputed from scratch on every change. With the vertex cap at 20,000 points this is well under a millisecond of arithmetic — no caching or incremental updates needed.
+Faces are arbitrary index loops rather than fixed-size quads or triangles,
+because the four schemes disagree about face degree: Catmull–Clark turns
+anything into quads, Loop and Butterfly require triangles, and Doo–Sabin emits
+an n-gon around every old vertex.
 
-## 3. Scheme Mathematics
-
-Both schemes are pure functions `(points, closed, param) → newPoints`, applied `iterations` times by a shared driver:
-
-```js
-function subdivide(points, closed, scheme, param, iterations, cap) {
-  let pts = points;
-  let done = 0;
-  while (done < iterations && pts.length * 2 <= cap) {
-    pts = (scheme === 'chaikin') ? chaikinStep(pts, closed, param)
-                                 : fourPointStep(pts, closed, param);
-    done++;
-  }
-  return { curve: pts, effectiveIterations: done };
-}
+```cpp
+struct Topology {
+    struct Edge { int a, b, f0, f1; };    // a < b; f1 == -1 on a boundary
+    std::vector<Edge> edges;
+    std::vector<std::vector<int>> vertEdges, vertFaces, faceEdges;
+    std::vector<char> vertBoundary;
+};
 ```
 
-### 3.1 Chaikin corner cutting (approximating)
+`buildTopology()` is rebuilt from scratch on every step. It is O(E log E)
+because edges are interned through a `std::map`, which is irrelevant next to the
+cost of the geometry at these sizes.
 
-For each edge (A, B), emit two points at parameter `t` and `1−t`:
+Two traversals do the real work for the harder schemes:
 
-```
-Q = (1−t)·A + t·B          // near A
-R = t·A + (1−t)·B          // near B
-```
+- `orderedNeighbours(v)` — the one-ring in cyclic order, starting from a
+  boundary edge when there is one. Butterfly's extraordinary stencil needs the
+  neighbours *in order*, indexed from the edge being split.
+- `orderedFacesAroundVertex(v)` — the face fan in **counter-clockwise** order,
+  plus whether the ring closes. Crossing the edge `(prev_f(v), v)` moves CCW
+  around `v`; crossing `(v, next_f(v))` moves CW. Doo–Sabin's vertex faces are
+  built directly from this.
 
-Default `t = 0.25` gives the classic points at 1/4 and 3/4 — the "1:3" cut from the lecture. Corners get cut off; the curve pulls away from the control points (approximating). Repeated forever, the limit curve is smooth (for t = 1/4 it is the quadratic B-spline curve — worth one sentence in the demo, not implemented as a feature).
+## 3. Surface scheme mathematics
 
-**Closed polygon:** iterate over all n edges including (P_{n−1}, P_0). Output 2n points.
+Let the cage have vertex positions `P`, faces `F`, edges `E`.
 
-**Open polyline:** iterate over the n−1 edges → 2(n−1) points, then **prepend the original first point and append the original last point** so the curve stays anchored at the ends (endpoint-preserving Chaikin). Without this, the curve visibly shrinks away from the endpoints each iteration, which looks like a bug in a demo.
-
-Note: with anchoring, output length is 2(n−1)+2 = 2n, so growth is ×2 per iteration in both modes — keeps the stats panel story simple.
-
-### 3.2 Four-Point scheme (interpolating)
-
-All old points are kept. For each edge (P_i, P_{i+1}) a new midpoint-ish point is inserted using the four surrounding points:
-
-```
-Q_i = (1/2 + w)·(P_i + P_{i+1}) − w·(P_{i−1} + P_{i+2})
-```
-
-With the classic `w = 1/16` this is the well-known stencil `(−1, 9, 9, −1)/16`. The negative weights push the new point slightly *outward*, which is what lets the limit curve pass smoothly *through* the old points (interpolating) instead of cutting corners.
-
-- `w = 0` → plain midpoint insertion → limit is the control polygon itself (still piecewise-linear). Good teaching moment on the slider.
-- `w = 1/16` → smooth (C¹) limit curve.
-- `w` well above ~1/8 → the scheme stops converging to a smooth curve; the curve becomes increasingly jagged and self-similar at every zoom level — the lecture's "fractal from wrong weights" warning. The fractal preset uses `w = 0.18`, iterations 6.
-
-**Closed polygon:** indices wrap modulo n. For edge i, the stencil uses `P[(i−1+n)%n], P[i], P[(i+1)%n], P[(i+2)%n]`. Output interleaves old and new: 2n points.
-
-**Growth-rate note:** closed output is 2n points, open output is 2n−1 (n old + n−1 inserted). So "vertex count doubles per iteration" is exact for closed polygons and approximate for open ones — the stats panel just reports the real count, but demo phrasing (and the test checklist) should say "≈ doubles" for the open case.
-
-**Open polyline — endpoint strategy (the risky part, decided now):** edges at the ends lack a `P_{i−1}` or `P_{i+2}`. Chosen strategy: **phantom points by reflection**:
+### 3.1 Catmull–Clark (approximating, quads from anything)
 
 ```
-P_{−1} = 2·P_0     − P_1        // mirror P_1 through P_0
-P_{n}  = 2·P_{n−1} − P_{n−2}    // mirror P_{n−2} through P_{n−1}
+face point    F_f = centroid of face f
+edge point    E_e = (P_a + P_b + F_left + F_right) / 4        interior
+              E_e = (P_a + P_b) / 2                           boundary
+vertex point  V_v = (Q + 2R + (n-3)S) / n                     interior
+                Q = mean of the adjacent face points
+                R = mean of the adjacent edge midpoints
+                S = P_v,  n = valence
+              V_v = (P_prev + 6 P_v + P_next) / 8             boundary
+              V_v = P_v                                       corner (valence 2)
 ```
 
-This linearly extrapolates the polygon past its ends, so the first and last edges use the same formula as interior edges with the phantom substituted. Endpoints remain exactly interpolated (old points are never moved), and the curve leaves the endpoints along the end-edge direction, which looks natural.
+New faces: for each corner `i` of each face `f`, the quad
+`(V_{v_i}, E_{next edge}, F_f, E_{prev edge})`. Face count becomes `Σ deg(f)`.
 
-Rejected alternatives, for the record:
-- *Index clamping* (`P_{−1} = P_0`): simplest, but flattens the curve near the ends — visibly worse.
-- *Dropping incomplete edges*: leaves gaps between the curve and the endpoints — breaks the "interpolating" story.
+The boundary rule is the cubic B-spline curve rule, so the border of an open
+patch converges to a cubic B-spline through the boundary polygon, and pinning
+valence-2 vertices keeps the corners of a rectangular patch in place.
 
-Implementation detail: write one helper `pt(i)` per step that resolves an arbitrary integer index to a real, wrapped, or phantom point depending on `closed`. Then the loop body is identical for both modes — this is where off-by-one bugs would otherwise live.
+### 3.2 Loop (approximating, triangles)
 
-### 3.3 Minimum-size guards
+```
+odd  (new edge vertex)   3/8 (a + b) + 1/8 (c + d)            interior
+                         1/2 (a + b)                          boundary
+even (old vertex)        (1 - n*beta) v + beta * sum(neighbours)
+                         beta = (5/8 - (3/8 + 1/4 cos(2pi/n))^2) / n
+                         3/4 v + 1/8 (prev + next)            boundary
+```
 
-- Chaikin: needs ≥ 2 points (open) / ≥ 3 (closed). Below that: draw points only, show hint.
-- Four-Point: needs ≥ 2 points open (phantoms cover the rest) / ≥ 3 closed. Same fallback.
-- Duplicate/coincident points are harmless in both schemes (no division anywhere) — no special handling.
+`beta` evaluates to exactly 3/16 at n = 3, matching Warren's special case, so no
+branch is needed. Each triangle becomes four.
 
-## 4. Rendering
+### 3.3 Doo–Sabin (approximating, dual, n-gons)
 
-Painter's order (back to front) on each `render()` call:
+For a face with `n` corners, corner `i` produces
 
-1. Clear canvas (dark background, e.g., `#1a1a24`).
-2. **Subdivided curve** — bold stroke (~2.5 px, bright accent color), built with one `Path2D`/`beginPath` pass; `closePath()` iff closed.
-3. **Overlay** (if `showOverlay`): control polygon as thin dashed gray line; control points as small filled circles (radius ~5 px), slightly brighter so they're clearly grabbable. Drawn *on top* of the curve so that in Four-Point mode the curve visibly threads through the dots, and in Chaikin mode it visibly misses them — this ordering is what sells requirement S2.
-4. Hovered/dragged point highlighted (larger radius / white ring).
-5. At iterations 0: only the polygon is drawn, at full brightness (it *is* the curve).
+```
+P'_i = sum_j alpha_ij P_j
+alpha_ii = (n + 5) / 4n
+alpha_ij = (3 + 2 cos(2pi (i-j) / n)) / 4n,  i != j
+```
 
-**Canvas sizing:** CSS size from flex layout; backing store scaled by `devicePixelRatio` on init and on `resize` (via `ctx.setTransform(dpr, 0, 0, dpr, 0, 0)`), so lines are crisp on HiDPI screens and mouse coordinates stay in CSS pixels. Points are stored in CSS-pixel coordinates; on window resize the points keep their coordinates (no rescaling — acceptable for a demo, noted in PRD A1).
+The weights sum to 1: `sum_{j!=i} alpha_ij = (3(n-1) - 2) / 4n = (3n-5)/4n`,
+and `(3n-5)/4n + (n+5)/4n = 1`.
 
-**Redraw policy:** event-driven only. Slider `input` events, mouse-move during drag, and toggles each call `update()`. No idle repainting.
+Three families of new faces:
 
-## 5. Input Handling
+1. **F-faces** — one shrunken copy of each old face.
+2. **E-faces** — one quad per old edge, spanning the gap between the two
+   shrunken faces.
+3. **V-faces** — one polygon per old vertex, joining the new points contributed
+   by every face in its fan.
 
-All on the canvas element:
+The winding of the E-faces is the subtle part. `Topology::Edge` stores its two
+faces in whatever order they were encountered, so the quad must be built from
+the face that traverses `a → b` and the face that traverses `b → a`, not from
+`f0` and `f1`. Building it from `f0`/`f1` produces a mesh that *looks* right at
+level 1 and disintegrates at level 2 (see [REPORT.md](REPORT.md) §4.1).
 
-| Event | Behavior |
+On a boundary, the gap is closed against the Chaikin points `(3a+b)/4` and
+`(a+3b)/4` of the boundary polyline, so the border converges to the quadratic
+B-spline — which is Chaikin corner cutting. Doo–Sabin *is* the surface
+generalisation of Chaikin, and its boundary behaviour says so.
+
+### 3.4 Modified Butterfly (interpolating, triangles)
+
+Old vertices are copied unchanged; only the new edge vertices need a rule.
+
+**Regular case** (both endpoints interior with valence 6):
+
+```
+Q = 1/2 (a + b) + 1/8 (c + d) - 1/16 (e1 + e2 + e3 + e4)
+```
+
+where `c, d` are the vertices opposite the edge in its two triangles and
+`e1..e4` are the four "wing" vertices beyond them.
+
+**Extraordinary case** — split of edge `v–w` where `v` has valence `K != 6`:
+
+```
+Q = 3/4 P_v + sum_{j=0}^{K-1} s_j P_{ring_j},   ring_0 = w
+K = 3:  s = ( 5/12, -1/12, -1/12 )
+K = 4:  s = (  3/8,     0,  -1/8, 0 )
+K >= 5: s_j = ( 1/4 + cos(2pi j/K) + 1/2 cos(4pi j/K) ) / K
+```
+
+`sum_j s_j = 1/4` for every K, so the stencil is affine. When both endpoints are
+extraordinary, average the two estimates.
+
+**Boundary** — the Four-Point curve scheme:
+`Q = 9/16 (a + b) − 1/16 (a_prev + b_next)`. This is the cleanest link in the
+whole project: the interpolating surface scheme degenerates on its boundary into
+exactly the interpolating curve scheme from the 2D version of this app.
+
+The one-ring ordering is direction-independent here, because `s_j` depends on
+`cos(2pi j/K)` and reversing the ring maps `j -> K-j`, which leaves the cosines
+unchanged.
+
+### 3.5 Driver
+
+```cpp
+SubdivResult subdivide(cage, scheme, levels, faceBudget = 400000);
+```
+
+Triangulates first when the scheme needs it, then applies the step function
+`levels` times, stopping early if the *next* step would exceed the budget (each
+step multiplies faces by about 4). Records face/vertex counts per level for the
+growth chart, and the elapsed time.
+
+## 4. Curve schemes
+
+Kept from the 2D version, lifted to `Vec3`. A shared index resolver wraps for
+closed polygons and reflects a phantom point (`P₋₁ = 2P₀ − P₁`) for open ones, so
+one formula covers every edge.
+
+| Scheme | Rule | Surface counterpart |
+|---|---|---|
+| Chaikin | each edge → `(1−t)A + tB`, `tA + (1−t)B`; `t = 1/4` | Doo–Sabin |
+| Four-Point | keep `P`, insert `(½+w)(Pᵢ+Pᵢ₊₁) − w(Pᵢ₋₁+Pᵢ₊₂)`; `w = 1/16` | Butterfly |
+| Midpoint displacement | keep `P`, insert the midpoint displaced by ±`r·|edge|/2`, range halving per level | diamond–square |
+
+## 5. Terrain
+
+Diamond–square on a `(2^levels + 1)²` grid. The displacement range is multiplied
+by `decay = 0.42 + 0.22·roughness` each level; `decay = 0.5` tracks the halving
+grid spacing exactly, so values below it read as smooth and above it as rough.
+Heights are normalised to [−1, 1], values below sea level are flattened into
+water, and vertex colours come from an elevation ramp.
+
+## 6. Rendering pipeline
+
+```
+world position
+  -> vp = projection * view          (Mat4::perspective, Mat4::lookAt)
+  -> clip space
+  -> Sutherland-Hodgman against w > epsilon      (near plane only)
+  -> perspective divide -> NDC
+  -> viewport transform -> supersampled pixels
+  -> backface cull by the sign of the screen-space signed area
+  -> barycentric coverage + z-buffer
+  -> shade
+```
+
+Only the near plane is clipped; the other five planes are handled for free by
+clamping the raster bounding box to the scissor rectangle. Depth is the
+post-divide NDC z, which is linear in screen space, so plain barycentric
+interpolation of it is correct. Colour and normals use the perspective-correct
+form (interpolate attribute/w and 1/w, then divide).
+
+**Shading.** Flat evaluates the lighting once per triangle at the centroid,
+Gouraud at the three corners with interpolation of the *result*, Phong
+interpolates the normal and evaluates per pixel. Blinn–Phong with a key light, a
+cool fill light, ambient, and a small rim term.
+
+**Overlays.** Lines and points are rasterised with a distance-based coverage
+test against the same depth buffer, with a bias pulling them toward the camera so
+a wireframe survives the depth test against the surface it lies on. A larger bias
+lets the control cage show through the surface deliberately.
+
+**Anti-aliasing.** The scene renders into a `w·ss × h·ss` target and is
+box-filtered into the `w × h` canvas. The HUD is drawn after the resolve, at
+native resolution, so text is never softened. `ss = 1` interactively, `ss = 3`
+for documentation.
+
+**Viewports.** A `Viewport` remaps the viewport's NDC cube onto the full target
+(`x' = x·vw/W + (2vx+vw)/W − 1`) and sets a scissor rectangle. Compare and Levels
+modes build four `Renderer` instances against one `RenderTarget`.
+
+## 7. Text and PNG without libraries
+
+- `tools/genfont.py` rasterises Inter and DejaVu Sans Mono into 8-bit alpha
+  glyph atlases with per-glyph metrics and emits `src/font_data.h` (base64 blob
+  plus a metrics table). The header is committed, so building the project never
+  needs Python or Pillow.
+- `png.cpp` implements DEFLATE (LZ77 with a 32 KB window and hash chains, fixed
+  Huffman coding), Adler-32, CRC-32, adaptive per-scanline PNG filtering, and the
+  chunk layout. Output was verified byte-identical against Pillow, with about
+  7× compression on rendered frames.
+
+## 8. Window without headers
+
+`x11window.cpp` declares the Xlib entry points and the handful of public structs
+it needs (`XKeyEvent`, `XButtonEvent`, `XConfigureEvent`, `XClientMessageEvent`,
+`XImage`) and resolves them with `dlopen`/`dlsym`. Pixels reach the screen by
+filling an `XImage` by hand, calling `XInitImage`, and `XPutImage`; that avoids
+`XCreateImage`/`XDestroyImage` and keeps ownership of the buffer. If the library
+or the display is missing, `open()` fails with a message pointing at `--shot`
+and the rest of the program is unaffected.
+
+## 9. Risks and mitigations
+
+| Risk | Mitigation |
 |---|---|
-| `mousedown` (left) | Hit-test control points (distance ≤ 10 px, iterate backwards so the topmost/latest wins). Hit → start drag (`dragIndex = i`). Miss → add new point at cursor, immediately start dragging it (nice UX: click-drag-place in one gesture). |
-| `mousemove` | Dragging → move point, `update()`. Not dragging → hit-test for hover cursor (`pointer` vs `crosshair`). |
-| `mouseup` / `mouseleave` | End drag. |
-| `contextmenu` | `preventDefault()`; hit-test; hit → remove that point, `update()`. |
-
-Hit-testing is a linear scan over ≤ a few dozen control points — no spatial structure needed. The hit radius (10 px) is deliberately larger than the drawn radius (5 px) for forgiving grabbing during a live demo.
-
-Sidebar controls are ordinary DOM `input`/`change` listeners in the `ui` module; each writes to `state` and calls `update()`. The `ui` module also owns:
-- swapping the contextual slider label/range/value when the scheme changes (t vs w), including the marked default and a "reset to default" affordance (FR-7/FR-8),
-- the fractal preset (sets scheme='fourpoint', w=0.18, iterations=6, then `update()`),
-- the fractal caption, which is **derived from state, not from the button**: visible iff `scheme === 'fourpoint' && fourPointW > 1/8` (FR-12) — so it also appears when the user drags the slider there manually, and disappears when w returns to the smooth range,
-- the shape preset (loads a hardcoded irregular polygon centered/scaled to the current canvas size), **also invoked once at startup** so the app never opens blank (FR-5),
-- stats panel refresh (innerText updates from `state` — cheap, done inside `update()`), including `maxEdgeLen` (one pass over `curve` inside `update()`) and the "≈ limit curve (edges < 1 px)" badge when `maxEdgeLen < 1` (FR-13).
-
-## 6. Milestone-3 Notes (only if built)
-
-- **Animated transitions:** on iteration change, linearly interpolate for ~200 ms between the previous curve and the new one *only when one is a refinement of the other* is complex; instead use the simpler, equally convincing approach: an "auto-grow" button that steps iterations 0→6 at 400 ms intervals (a `setInterval` driving the existing slider). No per-vertex correspondence math.
-- **PNG export:** `canvas.toDataURL('image/png')` into a temporary `<a download>` click. ~10 lines.
-- **Side-by-side:** not two canvases — render both schemes' curves on the *same* canvas in two colors with a small legend. Reuses everything; one extra `subdivide()` call and stroke pass behind a checkbox.
-
-## 7. Risks and Mitigations
-
-| # | Risk | Impact | Mitigation |
-|---|---|---|---|
-| R1 | Four-Point endpoint handling wrong (off-by-one, bad phantom) → curve detaches from endpoints or spikes at the ends | High — it's the centerpiece scheme | Single `pt(i)` index-resolver helper (§3.2) used by both modes; manual test checklist item: open 3-point "V" polyline must produce a smooth interpolating arc through all 3 points at w=1/16 |
-| R2 | Exponential blowup freezes the tab (lecture explicitly warns about this) | High for a live demo | Vertex cap in the `subdivide()` driver (§3), iterations hard-capped at 6, stats panel shows effective iterations when capped |
-| R3 | Drag hit-testing feels bad (can't grab points, or click-to-add fires when trying to drag) | Medium — makes demo look janky | Hit radius 10 px > draw radius; hit-test before add; backwards iteration for overlap; add-then-drag gesture |
-| R4 | Chaikin open-curve shrinkage read as a bug by the lecturer | Medium | Endpoint anchoring (§3.1), and it becomes a talking point: "pure Chaikin approximates *everywhere*, we pin the ends" |
-| R5 | Fractal mode misread as a rendering bug | Low | Preset button + one-line caption ("w far from 1/16 breaks smoothness — the curve converges to a fractal") |
-| R6 | Contextual slider (t vs w) confuses state (stale value applied to wrong scheme) | Low | Separate state fields `chaikinT` / `fourPointW`; the slider is only a *view* onto whichever is active |
-| R7 | HiDPI/resize coordinate mismatch (clicks land offset from points) | Medium — classic canvas bug | Single dpr-aware transform set in one place; mouse coords taken from `getBoundingClientRect()`; resize handler re-applies transform and re-renders |
-| R8 | Scope creep (adding B-spline math, zoom, more schemes) | Medium — violates lecturer's size expectation | PRD non-goals list; Milestone 3 is explicitly optional and last |
-
-## 8. Testing Approach
-
-No test framework (would exceed project scope); a manual checklist run before the demo, kept at the bottom of TODO.md. The pure `schemes` functions are the only logic worth unit-checking; they can be sanity-verified in the browser console (e.g., Chaikin on a unit square with t=0.25 → known 8 points; Four-Point with w=0 → exact midpoints).
+| A scheme silently produces a broken mesh | Euler characteristic checked for 4 schemes × 10 cages × 3 levels in the self test; non-manifold edges detected in `buildTopology` |
+| Inconsistent winding after refinement | Directed-edge audit during development; the E-face fix in §3.3 came from exactly this |
+| Subdivision freezes the machine | Face budget in the driver; levels capped in the UI |
+| Software rendering too slow to interact | Supersampling defaults to 1 in the window; measured 10–60 ms per frame at 1440×880 |
+| Xlib ABI assumptions wrong | Verified by capturing the live window and comparing against the offscreen render of the same state |
+| Screenshots drift from the code | `--gallery` regenerates all of them from the app; recipes live in `main.cpp` |

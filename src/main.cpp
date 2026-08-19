@@ -187,9 +187,15 @@ int runGallery(const std::string& dir, int argc, char** argv) {
         {"13-terrain-diamond-square.png",
          "--mode terrain --terrain-level 7 --roughness 0.55 --seed 20260819 "
          "--yaw 0.9 --pitch 0.42"},
-        {"14-wireframe-density.png",
-         "--mode surface --mesh pyramid --scheme catmull-clark --level 4 --no-cage "
-         "--yaw 0.6 --pitch 0.30"},
+        {"14-torus-genus-one.png",
+         "--mode surface --mesh torus --scheme catmull-clark --level 3 "
+         "--yaw 0.62 --pitch 0.72 --dist 5.0"},
+        {"15-open-cylinder-loop.png",
+         "--mode surface --mesh cylinder --scheme loop --level 3 "
+         "--yaw 0.75 --pitch 0.30"},
+        {"16-curve-chaikin-open.png",
+         "--mode curve --curve-scheme chaikin --curve-preset 2 --curve-level 5 "
+         "--yaw 0.9 --pitch 0.18 --dist 4.2"},
     };
 
     for (const Shot& s : shots) {

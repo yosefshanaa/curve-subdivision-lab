@@ -1,94 +1,172 @@
-# TODO — Interactive Curve Subdivision Lab
+# TODO — Subdivision Lab 3D
 
-Ordered task list. **Milestones 0 + 1 + 2 = the complete deliverable.** Milestone 3 is optional polish — stop after M2 if time or interest runs out; the project is already complete (Milestone 0's submission tasks still apply).
+Ordered task list. **Milestones 0–3 are the deliverable.** Milestone 4 is polish
+that was completed but was not required.
 
----
-
-## Milestone 0 — Course workflow setup (before any code)
-
-The lecturer grades the report and the git history, not just the app (see PRD §9).
-
-- [x] 0.1 `git init` in the project folder (or clone the course-provided mini-project repo if one is issued via GitHub Classroom — check first); first commit contains PRD.md, PLAN.md, TODO.md.
-- [x] 0.2 Create a stub `REPORT.md` now (title, goal, empty sections for each milestone) so screenshots/notes get added as work happens, not reconstructed at the end.
-- [x] 0.3 Adopt the commit cadence: **commit after every completed task below** (the lecturer explicitly treats one giant final commit as suspicious). Push, don't just commit locally — the lecturer only sees pushed history.
+Every box below is checked because the work is done; the italic notes record how
+each item was *verified*, not just that it was written.
 
 ---
 
-## Milestone 1 — Core (canvas, editing, both schemes with defaults)
+## Milestone 0 — Course workflow
 
-### Skeleton
-- [x] 1.1 Create `index.html` with page layout: title bar, flex row (canvas area + fixed sidebar), hint bar; dark theme CSS in a `<style>` block.
-- [x] 1.2 Canvas setup: size to container, `devicePixelRatio` backing-store scaling, `resize` handler that re-applies the transform and re-renders.
-- [x] 1.3 Define the `state` object (PLAN §2) and the `update()` function shell (recompute derived → render → stats), plus an empty `render()` that clears the canvas.
-
-### Point editing
-- [x] 1.4 Render control points + control polygon (respecting `state.closed`).
-- [x] 1.5 `mousedown`: hit-test (10 px radius, backwards scan); hit → start drag; miss → add point and start dragging it.
-- [x] 1.6 `mousemove`/`mouseup`/`mouseleave`: drag moves the point live; hover changes the cursor; highlight hovered/dragged point.
-- [x] 1.7 `contextmenu`: prevent default, delete point under cursor.
-- [x] 1.8 Sidebar: open/closed toggle, Clear button, Preset-shape button (hardcoded irregular polygon scaled to canvas). The preset also loads automatically on startup — the app must never open to a blank canvas (FR-5).
-
-### Schemes (fixed default weights for now)
-- [x] 1.9 Write the `pt(i)` index resolver (wrap when closed; phantom reflection `2·P_0 − P_1` / `2·P_{n−1} − P_{n−2}` when open) — shared by both schemes.
-- [x] 1.10 `chaikinStep(points, closed, t)` with t = 0.25: two points per edge; open mode prepends/appends original endpoints (anchoring).
-- [x] 1.11 `fourPointStep(points, closed, w)` with w = 1/16: keep old points, insert `Q = (1/2+w)(P_i+P_{i+1}) − w(P_{i−1}+P_{i+2})` per edge via `pt(i)`.
-- [x] 1.12 `subdivide()` driver: apply active scheme `iterations` times with the 20,000-vertex cap; store `curve` and `effectiveIterations` in state. Hardcode iterations = 4 for now.
-- [x] 1.13 Render the subdivided curve (bold) under the control-polygon overlay; scheme radio buttons in sidebar switch between the two, labeled with lecture vocabulary: "Chaikin — corner cutting (approximating)" / "Four-Point (interpolating)" (FR-6).
-- [x] 1.14 Min-point guards: too few points → draw what exists + "add more points" hint instead of running the scheme.
-- [x] 1.15 **Console sanity check:** Chaikin on unit square (t=0.25) gives the known 8 points; Four-Point with w=0 gives exact midpoints; open 3-point "V" at w=1/16 gives a smooth arc through all 3 points. *(Done in Node against the functions extracted from index.html — all pass.)*
-
-**M1 done when:** you can draw/edit a polygon and see either scheme's smoothed curve with default weights, open or closed, without errors. ✅
+- [x] 0.1 Decide the rewrite scope with the lecturer's mini-project brief in
+      mind: C++, 3D, surfaces, and the rendering pipeline implemented rather
+      than called.
+- [x] 0.2 Rewrite PRD.md, PLAN.md and TODO.md for the new project before
+      writing code; keep the old documents' structure so the diff shows what
+      changed.
+- [x] 0.3 Commit per milestone, not once at the end.
+      *Four substantive commits, each with a message that says what was
+      verified.*
 
 ---
 
-## Milestone 2 — Interactivity (sliders, overlay, fractal, stats)
+## Milestone 1 — Foundations (no rendering yet)
 
-- [x] 2.1 Iterations slider (0–6) wired to state; iteration 0 draws only the full-brightness polygon.
-- [x] 2.2 Contextual weight slider: shows/edits `chaikinT` ∈ [0.05, 0.45] when Chaikin active, `fourPointW` ∈ [0, 0.25] when Four-Point active; label, range, and displayed value swap on scheme change; default value marked ("default" reset button).
-- [x] 2.3 Overlay toggle (on by default): faint dashed control polygon + point dots drawn on top of the curve.
-- [x] 2.4 "Show fractal behavior" preset: sets Four-Point, w = 0.18, iterations = 6. The explanatory caption ("weights far from 1/16 → limit curve is fractal, not smooth") is **state-driven**: shown iff scheme is Four-Point and w > 1/8, so it also appears/disappears correctly when the slider is moved by hand (FR-12).
-- [x] 2.5 Stats panel: scheme name + (approximating/interpolating), iterations (with "capped" note when `effectiveIterations < iterations`), current t/w, control-point count, curve vertex count, and **max curve-edge length in px** with an "≈ limit curve (edges < 1 px)" badge when it drops below 1 — this is the visible proof of the "~5 iterations suffice" rule (FR-13).
-- [x] 2.6 Hint bar text: "click: add · drag: move · right-click: delete".
-- [x] 2.7 Manual test pass (checklist below) + fix everything found. *(Run headlessly via Chrome DevTools Protocol, including synthetic mouse events; one bug found and fixed — see REPORT.md.)*
-- [x] 2.8 Tidy pass: consistent naming, dead code removed, short header comment in the file stating what it is and the course context.
-- [x] 2.9 Fill `REPORT.md` (PRD §9 D2): what was built, how to run it, screenshots of — both schemes on the same polygon, overlay showing interpolating-vs-approximating, fractal mode, stats panel at 5–6 iterations with the limit-curve badge — plus a mapping of features → lecture concepts and problems encountered along the way.
-- [x] 2.10 Final push; skim the pushed git history to confirm it tells a believable incremental story (Milestone 0.3). Optionally share the demo on Discord using the lecturer's format: what it is, why it's useful, what concept it demonstrates. *(Discord share left to the author.)*
+### Math and I/O
+- [x] 1.1 `vecmath.h`: Vec2/3/4, row-major `Mat4` with a column-vector
+      convention, `lookAt`, `perspective`, `orthographic`, Gauss–Jordan inverse,
+      normal matrix.
+- [x] 1.2 `png.{h,cpp}`: PNG writer with its own DEFLATE (LZ77 + fixed
+      Huffman), Adler-32, CRC-32 and adaptive scanline filtering.
+      *Verified: a 640×400 test image round-trips byte-identically through
+      Pillow, at 7.17× compression. No zlib linked.*
 
-**M2 done when:** every functional requirement FR-1 … FR-16 in PRD.md passes the checklist, and REPORT.md + git history are submission-ready. **This is the deliverable.** ✅
-
----
-
-## Milestone 3 — Optional polish (each item independent; pick any or none)
-
-- [x] 3.1 "Auto-grow" button: steps iterations 0 → 6 on a ~400 ms interval through the normal slider path; button becomes "stop" while running (manual slider use also cancels it).
-- [x] 3.2 PNG export button (`canvas.toDataURL` + temporary download link).
-- [x] 3.3 Side-by-side compare checkbox: render both schemes on the same polygon in two colors + mini legend (second `subdivide()` call + second stroke pass).
-- [x] 3.4 Visual refinement: dark palette, point hover/drag highlight, favicon + title, spacing.
-- [ ] 3.5 (Only if demoing from a browser without file access) verify it also works when hosted statically. *(Not needed for the planned file:// demo.)*
-
----
-
-## Milestone 4 — v2 additions (PRD §9, user-requested after review)
-
-- [x] 4.1 Magnifier lens: cursor-following 6× lens re-rendering the active curve subdivided 4 levels deeper (seeded, 80k cap); smooth schemes flatten, fractal stays jagged. View toggle, ring + "6× · +4 iter" label.
-- [x] 4.2 Random midpoint displacement scheme (Lecture 2 terrain recipe): third scheme card, roughness slider (± r·|edge|/2, halves per level via edge halving), seeded mulberry32 RNG, re-roll button, live stencil variant. Compare mode disabled while active.
-- [x] 4.3 Verified in Node (determinism per seed, interpolation, r=0 flatness, displacement bounds) and headlessly via CDP (UI wiring, terrain stability across redraws, re-roll, lens rendering, zero console errors); sidebar still fits 800px height with no scroll.
+### Mesh and topology
+- [x] 1.3 `Mesh` with arbitrary-degree faces, Newell face normals,
+      area-weighted vertex normals, bounds and bounding-sphere normalisation.
+- [x] 1.4 `Topology`: edge interning, edge→face and vertex→edge/face adjacency,
+      boundary flags, non-manifold detection.
+- [x] 1.5 `orderedNeighbours()` and `orderedFacesAroundVertex()` — cyclic
+      one-ring traversals with correct CW/CCW direction and boundary handling.
+- [x] 1.6 `MeshStats`: V, E, F, Euler characteristic, boundary edges, face
+      degree histogram, valence range, extraordinary count, edge lengths.
+- [x] 1.7 Ten base cages: cube, tetrahedron, octahedron, icosahedron, torus,
+      open plane, open cylinder, L-block, cross, pyramid — including a polycube
+      builder that emits only non-shared faces.
+      *Verified: χ = 2 for the closed solids, 0 for the torus and cylinder,
+      1 for the open plane; no non-manifold edges anywhere.*
 
 ---
 
-## Pre-demo manual test checklist
+## Milestone 2 — The four surface schemes
 
-Items marked ✅ were verified headlessly (CDP-driven Chrome, synthetic mouse events, zero console errors). Items marked 👤 need a quick human pass before the live demo — they are about feel/appearance, not correctness.
+- [x] 2.1 Catmull–Clark: face/edge/vertex points, `(Q + 2R + (n−3)S)/n`, quad
+      construction per face corner.
+      *Verified: cube level 1 = 26 V / 48 E / 24 F, exactly V+E+F of the cage.*
+- [x] 2.2 Catmull–Clark boundary rules: (1,6,1)/8 along the border, valence-2
+      corners pinned.
+      *Verified: the corner of the open plane patch moves 0.00e+00 after three
+      levels.*
+- [x] 2.3 Loop, with Warren's β and boundary rules.
+      *Verified: cube (triangulated) level 1 = 26 V / 48 tris; the open patch
+      stays manifold.*
+- [x] 2.4 Doo–Sabin: the α weights, F-faces, E-faces, V-faces.
+      *Verified: cube level 1 = 24 V / 48 E / 26 F — the exact dual of
+      Catmull–Clark — and every vertex has valence 4.*
+- [x] 2.5 Doo–Sabin boundary handling via Chaikin points on the boundary
+      polyline, including the corner case where both boundary edges belong to
+      one face.
+      *Verified: the open plane keeps χ = 1 through three levels.*
+- [x] 2.6 Modified Butterfly: regular 8-point stencil, extraordinary stencils
+      for K = 3, 4 and ≥ 5, averaging when both endpoints are irregular, and the
+      Four-Point rule on boundaries.
+      *Verified: after three levels on all ten cages, the maximum displacement
+      of any original vertex is 0 — bit-exact interpolation.*
+- [x] 2.7 `subdivide()` driver with automatic triangulation and a face budget.
+      *Verified: nine requested levels on the torus stop at six, at 393 216
+      faces, with the capped flag set.*
+- [x] 2.8 Cross-check every scheme against the topology.
+      *Verified: 4 schemes × 10 cages × 3 levels = 120 refinements, all
+      preserving the Euler characteristic of their input and all manifold.*
 
-- [x] ✅ Fresh load → preset polygon and curve already visible (no blank canvas); Clear → hint appears; Preset button restores.
-- [x] ✅ Add points by clicking; drag moves them (live curve update); right-click deletes — verified with synthetic mouse events. 👤 also try by hand for feel (no dead zones / accidental adds).
-- [x] ✅ Toggle open/closed in both schemes — endpoints stay anchored when open (distance to first/last control point < 1e-6); no gaps or spikes at the ends.
-- [ ] 👤 Chaikin: t slider from 0.05 → 0.45 morphs the curve smoothly; corners visibly "cut".
-- [x] ✅ Four-Point: curve passes through every control point at w = 1/16 (old points are preserved exactly by construction; visually confirmed in screenshots).
-- [ ] 👤 Overlay on: Chaikin misses the dots, Four-Point threads them — visible from 2 m away (projector test).
-- [x] ✅ Iterations 0 → 6: vertex count doubles each step (≈ doubles for open Four-Point); max-edge halves each step; badge verified at 6 iterations for a dense 30-point polygon (0.82 px); responsive at 6.
-- [x] ✅ Fractal preset: one click → jagged curve + caption; w back to 1/16 hides the caption; dragging w high manually also shows it.
-- [x] ✅ 2-point and 3-point polygons, open and closed: hint shown or sane output, never a console error.
-- [x] ✅ Degenerate input: coincident points, all-collinear points — no crash.
-- [x] ✅ Resize/viewport + DPR change mid-session: clicks still land exactly where aimed.
-- [x] ✅ Full reload → fresh state, works from `file://`.
+---
+
+## Milestone 3 — Renderer, application, documentation
+
+### Rendering
+- [x] 3.1 `RenderTarget` with supersampled colour + depth and a box-filter
+      resolve.
+- [x] 3.2 Triangle rasteriser: barycentric coverage, z-buffer, backface culling
+      by signed area, perspective-correct interpolation.
+- [x] 3.3 Sutherland–Hodgman clipping against the near plane, with attribute
+      interpolation.
+- [x] 3.4 Flat, Gouraud and Phong shading over Blinn–Phong with key/fill/ambient
+      and a rim term.
+- [x] 3.5 Depth-tested anti-aliased lines and points for wireframes, cages,
+      control points, normals and extraordinary-vertex markers.
+- [x] 3.6 `Viewport` remapping + scissor, so several independent views share one
+      frame.
+- [x] 3.7 Orbit camera with clamped pitch and zoom limits.
+
+### 2D layer
+- [x] 3.8 `Canvas`: blending, rectangles, signed-distance rounded rectangles,
+      anti-aliased lines and circles, RGB export.
+- [x] 3.9 `tools/genfont.py` bakes five faces into `src/font_data.h`; text
+      renderer with UTF-8 decoding and per-glyph metrics.
+      *Verified: specimen sheet rendered and inspected; a script cross-checks
+      that every non-ASCII codepoint appearing in the source is present in the
+      atlas.*
+
+### Application
+- [x] 3.10 `AppState` + `recompute()` + `renderFrame()`, with the window and the
+      screenshot path sharing one code path.
+- [x] 3.11 Surface mode with cage overlay, wireframe, extraordinary markers and
+      normals.
+- [x] 3.12 Curve mode: the three curve schemes on 3D control polygons.
+- [x] 3.13 Terrain mode: diamond–square with roughness, seed and elevation ramp.
+- [x] 3.14 Compare mode: four schemes on one cage, 2×2.
+- [x] 3.15 Levels mode: levels 0–3 of one scheme, 2×2.
+- [x] 3.16 HUD: scheme card, cage, level ticks, mesh statistics, Euler
+      characteristic, longest edge in pixels, log-scaled growth chart, the active
+      stencil, view toggles, key hints.
+- [x] 3.17 Keyboard and mouse handling for every mode.
+
+### Platform and tooling
+- [x] 3.18 `x11window.*`: Xlib via `dlopen`, hand-declared structs, `XInitImage`
+      + `XPutImage` presentation, `select()`-based idle.
+      *Verified: the live window was captured with a throwaway `XGetImage` tool
+      and compared against the offscreen render of the same state — identical
+      colours, so the visual masks and byte order are right.*
+- [x] 3.19 CLI: `--shot`, `--gallery`, `--selftest`, scene and view options,
+      `--help`.
+- [x] 3.20 `--selftest` with 15 checks covering topology, known counts,
+      interpolation, boundary rules, curve schemes, budgets and the renderer.
+- [x] 3.21 Makefile: `all`, `run`, `test`, `screenshots`, `font`, `clean`,
+      `help`, with dependency generation.
+      *Verified: `ldd subdivlab` lists only libc, libm, libstdc++ and libgcc.*
+
+### Documentation
+- [x] 3.22 14-image gallery generated by the application, with the recipes
+      stored in `main.cpp`.
+- [x] 3.23 README written around those images.
+- [x] 3.24 REPORT.md with the concept mapping and the problems actually hit.
+
+---
+
+## Milestone 4 — Polish (optional, completed)
+
+- [x] 4.1 HUD degrades gracefully on short windows instead of overflowing.
+- [x] 4.2 Wireframe opacity scales with face count so dense meshes read as a
+      grid rather than a dark smear.
+- [x] 4.3 Meshes normalised by bounding-sphere radius so every cage frames
+      identically.
+- [x] 4.4 Curve parameters default per scheme, so switching to Four-Point does
+      not land on an accidental fractal weight.
+- [x] 4.5 Auto-spin, in-app PNG capture (`P`), and window-title status line.
+
+---
+
+## Deliberately not done
+
+These were considered and rejected as out of scope for a mini-project; they are
+listed so the boundary is explicit rather than accidental.
+
+- Semi-sharp creases and per-edge sharpness weights.
+- Adaptive / feature-driven subdivision.
+- Exact limit-position and limit-normal evaluation (eigen-analysis of the
+  subdivision matrix).
+- Interactive 3D cage editing and OBJ import.
+- Texture mapping, shadow mapping, ambient occlusion.
+- A second window backend (Win32 / Cocoa / Wayland).
